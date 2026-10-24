@@ -79,6 +79,9 @@ header .sub{color:var(--muted);font-weight:600;font-size:15px;margin-top:4px}
 html[dir=rtl] .bar61 .fill{left:auto;right:0}
 .bloc.r .bar61 .fill{background:var(--right)} .bloc.l .bar61 .fill{background:var(--left)}
 .bar61 .m61{position:absolute;top:-3px;bottom:-3px;width:3px;background:var(--accent);right:calc(61/120*100%)}
+.wasted{margin-top:8px;font-size:14px;font-weight:700;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;min-height:1.2em}
+.wasted b{color:var(--ink);font-weight:900}
+.wasted-other{grid-column:1/-1;font-size:14px;font-weight:700;color:var(--muted);padding:0 4px}
 .other-note{grid-column:1/-1;border:var(--border);border-radius:var(--radius);background:var(--card);padding:8px 12px;font-weight:700;color:var(--accent)}
 
 .panel{background:var(--card);border:var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
@@ -168,17 +171,23 @@ details.steps .body{border-top:var(--border);padding:12px 14px;font-size:15px}
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .help{color:var(--muted);font-size:14px;font-weight:600;margin:0 0 10px}
 
+.pctM{display:none}
 @media (max-width:760px){
   body{padding:10px 10px 130px}
   .stats{grid-template-columns:1fr 1fr}
   .hideM,.hideS{display:none}
-  tr.pass td.n{color:var(--ok)}
-  .pollfill select{min-width:140px}
+  .box .sub .dflt{display:none}
+  .toolbar button{padding:6px 10px;font-size:14px}
+  .pollfill select{min-width:120px;padding:6px 6px;font-size:14px}
   .coal .title{display:none}
   .coal .big{font-size:32px;min-width:50px}
-  td,th{padding:6px 5px}
-  td.name{font-size:15px}
-  input.votes{width:108px;font-size:16px}
+  td,th{padding:6px 4px}
+  td.name{font-size:14px;white-space:normal;max-width:104px;line-height:1.2}
+  input.votes{width:92px;font-size:16px;padding:6px 5px}
+  #tbl td.n,#tbl th.n{display:none}
+  .pctM{display:block;font-size:12px;font-weight:700;color:var(--muted);text-align:center;margin-top:3px;direction:ltr}
+  tr.pass .pctM{color:var(--ok)}
+  td.seats{font-size:24px;padding-inline:4px}
 }
 @media (max-width:460px){
   .banner{grid-template-columns:1fr}
@@ -216,7 +225,7 @@ details.steps .body{border-top:var(--border);padding:12px 14px;font-size:15px}
   <div class="box">
     <div class="lbl">בעלי זכות בחירה</div>
     <div class="val"><input type="text" inputmode="numeric" id="inEligible" class="num" aria-label="בעלי זכות בחירה"></div>
-    <div class="sub"><span>ברירת מחדל: 7,331,981</span></div>
+    <div class="sub"><span class="dflt">ברירת מחדל: 7,331,981</span></div>
   </div>
   <div class="box">
     <div class="lbl">הצביעו בפועל</div>
@@ -244,6 +253,7 @@ details.steps .body{border-top:var(--border);padding:12px 14px;font-size:15px}
       <div class="part"><span class="pl">חרדים</span><span class="pv num" id="rHaredi">0</span></div>
     </div>
     <div class="bar61"><div class="fill" id="rFill" style="width:0%"></div><div class="m61"></div></div>
+    <div class="wasted num" id="rWasted"></div>
   </div>
   <div class="bloc l" id="blocL">
     <div class="head"><span class="name">גוש שמאל</span><span class="maj">61+ רוב</span></div>
@@ -253,8 +263,10 @@ details.steps .body{border-top:var(--border);padding:12px 14px;font-size:15px}
       <div class="part"><span class="pl">ערבים</span><span class="pv num" id="lArab">0</span></div>
     </div>
     <div class="bar61"><div class="fill" id="lFill" style="width:0%"></div><div class="m61"></div></div>
+    <div class="wasted num" id="lWasted"></div>
   </div>
   <div class="other-note" id="otherNote" style="display:none"></div>
+  <div class="wasted-other num" id="oWasted" style="display:none"></div>
 </section>
 
 <section class="panel">
@@ -496,6 +508,13 @@ function render(){
   $('lTotal').textContent=lT; $('lLeft').textContent=left; $('lArab').textContent=arab;
   $('rFill').style.width=(rT/120*100)+'%'; $('lFill').style.width=(lT/120*100)+'%';
   $('blocR').classList.toggle('has61', rT>=61); $('blocL').classList.toggle('has61', lT>=61);
+  // קולות שהתבזבזו = קולות לרשימות שלא עברו את החסימה, לפי גוש
+  const wasted=b=>R.filter(r=>!r.pass && (Array.isArray(b)?b.includes(r.bloc):r.bloc===b)).reduce((a,r)=>a+r.votes,0);
+  const wR=wasted(['right','haredi']), wL=wasted(['left','arab']), wO=wasted('none');
+  const wTxt=w=> w? `<span>קולות שהתבזבזו (מתחת לחסימה)</span><b>${fmt(w)}${measure?` ≈ ${(w/measure).toLocaleString('he-IL',{maximumFractionDigits:1})} מנדטים`:''}</b>` : '';
+  $('rWasted').innerHTML=wTxt(wR); $('lWasted').innerHTML=wTxt(wL);
+  const ow=$('oWasted');
+  if(wO){ ow.style.display=''; ow.innerHTML=`ללא גוש ("אחר"): <b style="color:var(--ink)">${fmt(wO)}</b> קולות מתחת לחסימה${measure?` ≈ ${(wO/measure).toLocaleString('he-IL',{maximumFractionDigits:1})} מנדטים`:''}`; } else ow.style.display='none';
   const on=$('otherNote');
   if(none>0){ on.style.display=''; on.textContent=`שים לב: ${none} מנדטים לרשימות ללא גוש ("אחר") – הקצה להן גוש בהגדרות.`; } else on.style.display='none';
   renderTable(res);
@@ -521,7 +540,7 @@ function renderTable(res){
         <td class="name">${esc(r.name)}</td>
         <td class="c">${r.other?'':slipHtml(r)}</td>
         <td class="hideM">${r.other?'':`<span class="blocTag ${r.bloc}">${BLOCS[r.bloc]||'ללא'}</span>`}</td>
-        <td><input type="text" inputmode="numeric" class="votes num" data-votes="${r.id}" value="${r.votes?fmt(r.votes):''}" placeholder="0" aria-label="קולות ${esc(r.name)}"></td>
+        <td><input type="text" inputmode="numeric" class="votes num" data-votes="${r.id}" value="${r.votes?fmt(r.votes):''}" placeholder="0" aria-label="קולות ${esc(r.name)}"><div class="pctM num">${valid&&r.votes?pct(r.votes,valid):''}</div></td>
         <td class="n num">${valid?pct(r.votes,valid):'—'}</td>
         <td class="c hideS">${valid&&r.votes? (r.pass?'<span class="status ok">עברה</span>':'<span class="status no">לא עברה</span>') : ''}</td>
         <td class="c num hideM">${r.pass?r.first:''}</td>
