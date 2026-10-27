@@ -724,17 +724,19 @@ $('btnAddPoll').onclick=()=>{
 const LIVE_URL='live/results.json';                                        // נכתב ע"י GitHub Actions מקובץ expc.csv של ועדת הבחירות
 const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json'; // אחוז הצבעה במהלך היום (הזנה פתוחה שמעתיקה את נתוני הוועדה)
 const FULL_ELIGIBLE=7331981;
-const TURNOUT_URL='live/turnout.json', SECTORS_URL='live/sectors.json';
-const live={data:null, day:null, turnout:null, sectors:null, sel:null, timer:null};
+const TURNOUT_URL='live/turnout.json', SECTORS_URL='live/sectors.json', T26_URL='live/turnout26.json';
+const live={data:null, day:null, turnout:null, t26:null, sectors:null, sel:null, timer:null};
+const SECTOR_NAMES={general:'כללי (יהודי לא חרדי)', haredi:'חרדים', arab:'ערבים', judea_samaria:'יהודה ושומרון', christian:'נוצרים', druze:'דרוזים'};
 const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
 async function fetchJSON(u){ const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); return r.json(); }
 const slotOf=label=>{ const m=/^(\d{1,2}):/.exec(label||''); if(!m) return null; let h=parseInt(m[1],10); h-=h%2; return (h<10?'0':'')+h+':00'; };
 async function refreshLive(){
-  const [a,b,c,d]=await Promise.allSettled([fetchJSON(LIVE_URL), fetchJSON(TURNOUT_URL), fetchJSON(DAY_URL), live.sectors? Promise.resolve(live.sectors) : fetchJSON(SECTORS_URL)]);
+  const [a,b,c,d,e]=await Promise.allSettled([fetchJSON(LIVE_URL), fetchJSON(TURNOUT_URL), fetchJSON(DAY_URL), live.sectors? Promise.resolve(live.sectors) : fetchJSON(SECTORS_URL), fetchJSON(T26_URL)]);
   live.data= a.status==='fulfilled'? a.value : null;
   live.turnout= b.status==='fulfilled'? b.value : live.turnout;
   live.day= c.status==='fulfilled'? c.value : null;
   live.sectors= d.status==='fulfilled'? d.value : live.sectors;
+  live.t26= e.status==='fulfilled' && Array.isArray(e.value.reports)? e.value : live.t26;
   renderLive();
   if(S.liveAuto && live.data && live.data.status!=='no_data' && live.data.updated!==S.liveApplied) applyLive();
 }
@@ -742,7 +744,15 @@ function series26(){
   const s=Object.assign({}, (live.turnout&&live.turnout.k26)||{});
   const t=live.day&&live.day.turnout; const slot=t&&slotOf(t.updated);
   if(slot && t.pct>0 && s[slot]==null) s[slot]=t.pct;
+  // דיווחים רשמיים לפי שעה מ-votes26 (שעה עגולה, בלי מגזרים = דיווח הוועדה)
+  (live.t26&&live.t26.reports||[]).forEach(r=>{ const h=r.hour, n=r.national; if(Number.isInteger(h) && h>=10 && h<=22 && n && n.now>0){ s[(h<10?'0':'')+h+':00']=Math.round(n.now*1000)/10; } });
   return s;
+}
+function t26Sectors(){ // אומדן המגזרים האחרון (מדגם קלפיות) מ-votes26
+  const rs=(live.t26&&live.t26.reports||[]).filter(r=>r.sectors&&r.sectors.length);
+  if(!rs.length) return null;
+  const r=rs[rs.length-1]; const at=new Date(r.at); const label=isNaN(at)?'':at.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  return {label, cov:r.national&&r.national.coverage, reported:r.national&&r.national.reported, stations:r.national&&r.national.stations, list:r.sectors};
 }
 function sectorNow(){ // אומדן מגזרי מנתוני היישובים בהזנה (ממוצע משוקלל לפי בעלי זכות בחירה 2022)
   const towns=live.day&&live.day.live_towns, sec=live.sectors; if(!towns||!sec) return null;
@@ -766,13 +776,20 @@ function renderLive(){
     $('lvCmp').innerHTML= p!=null? `ב-2022 באותה שעה <b>${p}%</b> · הפרש <span class="${s26[sel]>=p?'up':'down'}">${s26[sel]>=p?'+':''}${(s26[sel]-p).toFixed(1)}</span>` : '';
   } else { $('lvPct').textContent='—'; $('lvCmp').textContent=''; }
   // אומדן מגזרי
-  const recorded=(live.turnout&&live.turnout.k26_sectors)||{};
-  const est= recorded[sel] || (sel===last? sectorNow() : null);
-  const sc=live.sectors;
-  if(est && sc){
-    const row=(k,label)=> est[k]!=null? `<span>${label} <b>${est[k]}%</b> <small>(${est[k+'_n']} יישובים · בסוף 2022: ${sc[k].turnout2022}%)</small></span>` : '';
-    $('lvSect').innerHTML=`<span><small>אומדן לפי יישובים ברובם:</small></span>`+row('haredi','חרדים')+row('arab','ערבים');
-  } else $('lvSect').innerHTML='';
+  const v26=t26Sectors();
+  if(v26 && sel===last){
+    const pick=['haredi','arab','judea_samaria','general'];
+    const rows=pick.map(id=>{ const x=v26.list.find(s=>s.id===id); return x? `<span>${SECTOR_NAMES[id]||id} <b>${(x.now*100).toFixed(1)}%</b> <small>(בסוף 2022: ${(x.prev*100).toFixed(1)}%)</small></span>` : ''; }).join('');
+    $('lvSect').innerHTML=`<span><small>מגזרים, אומדן מקלפיות מדגם${v26.label?' נכון ל-'+v26.label:''}${v26.reported?' · '+fmt(v26.reported)+' מתוך '+fmt(v26.stations)+' קלפיות':''}:</small></span>`+rows;
+  } else {
+    const recorded=(live.turnout&&live.turnout.k26_sectors)||{};
+    const est= recorded[sel] || (sel===last? sectorNow() : null);
+    const sc=live.sectors;
+    if(est && sc){
+      const row=(k,label)=> est[k]!=null? `<span>${label} <b>${est[k]}%</b> <small>(${est[k+'_n']} יישובים · בסוף 2022: ${sc[k].turnout2022}%)</small></span>` : '';
+      $('lvSect').innerHTML=`<span><small>אומדן לפי יישובים ברובם:</small></span>`+row('haredi','חרדים')+row('arab','ערבים');
+    } else $('lvSect').innerHTML='';
+  }
   // גרף
   const W=600,H=190,L=34,R=16,T=12,B=26, maxY=80;
   const X=h=>L+(parseInt(h,10)-10)/12*(W-L-R), Y=p=>T+(1-p/maxY)*(H-T-B);
@@ -791,12 +808,13 @@ function renderLive(){
   // תוצאות
   $('liveAct').classList.toggle('on', !!has);
   if(has){
-    const counted=d.eligible? d.eligible/FULL_ELIGIBLE : 0;
-    $('liveMain').innerHTML=`ספירת קולות: נספרו <b>${pct1(counted)}</b> מבעלי זכות הבחירה · ${fmt(d.localities)} יישובים · עודכן ${esc(d.updated_label||'')}`;
+    const counted= d.counted_pct!=null? d.counted_pct/100 : (d.eligible? d.eligible/FULL_ELIGIBLE : 0);
+    const what= d.counted_pct!=null? `מהקלפיות (${fmt(d.kalpi_counted)} מתוך ${fmt(d.kalpi)})` : 'מבעלי זכות הבחירה';
+    $('liveMain').innerHTML=`ספירת קולות: נספרו <b>${pct1(counted)}</b> ${what} · ${fmt(d.localities)} יישובים · עודכן ${esc(d.updated_label||'')}${d.status==='final'?' · <b>סופי</b>':''}`;
     $('liveApplied').textContent= S.liveApplied===d.updated? 'המחשבון מציג את הנתונים האלה' : '';
     $('liveSrc').textContent='מקורות: ועדת הבחירות המרכזית (אחוזי הצבעה לפי שעת דיווח; קובץ תוצאות לפי יישובים, מתעדכן כל כ-5 דקות). נתוני 2022 מדיווחי הוועדה באותו יום.';
   } else {
-    $('liveSrc').textContent='מקורות: ועדת הבחירות המרכזית, אחוזי הצבעה לפי שעת דיווח (דרך הזנת election-il-2026). נתוני 2022 מדיווחי הוועדה באותו יום. תוצאות הספירה יופיעו כאן אחרי סגירת הקלפיות.';
+    $('liveSrc').textContent='מקורות: דיווחי ועדת הבחירות המרכזית לפי שעה (דרך votes26.com ו-election-il-2026); אומדני המגזרים: votes26.com, מדגם קלפיות. נתוני 2022 מדיווחי הוועדה באותו יום. תוצאות הספירה יופיעו כאן אחרי סגירת הקלפיות.';
   }
   $('liveAuto').checked=!!S.liveAuto;
 }
@@ -807,7 +825,7 @@ function applyLive(){
   Object.entries(d.votes||{}).forEach(([letter,n])=>{ const id=byLetter[letter.trim()]; if(id) votes[id]=(votes[id]||0)+n; else other+=n; });
   votes[OTHER_ID]=other;
   S.votes=votes; S.invalid=d.invalid||0; if(d.eligible) S.eligible=d.eligible;
-  S.liveShare= d.eligible? Math.min(1, d.eligible/FULL_ELIGIBLE) : 1;
+  S.liveShare= d.counted_pct!=null? Math.max(0.01, Math.min(1, d.counted_pct/100)) : (d.eligible? Math.min(1, d.eligible/FULL_ELIGIBLE) : 1);
   S.liveApplied=d.updated; render(); renderLive();
 }
 $('btnLive').onclick=()=>{ applyLive(); window.scrollTo(0,0); };

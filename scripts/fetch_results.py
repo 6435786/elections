@@ -81,6 +81,57 @@ def summarize(text, source):
 
 
 DAY_URL = "https://navonyaniv.github.io/election-il-2026/results.json"
+GOVMAP_MANIFEST = "https://elections.govmap.gov.il/data/votes/elections.json"
+
+
+def govmap_summary():
+    """מקור שני: GovMap (אתר המיפוי הממשלתי) – municipal_data.json של הכנסת ה-26, אותו מבנה תוצאה כמו summarize()."""
+    man = json.loads(download(GOVMAP_MANIFEST).decode("utf-8"))
+    el = man.get("elections", {})
+    e = el.get("26") or next((v for v in el.values() if v.get("isCurrent")), None)
+    if not e:
+        raise SystemExit("govmap: no current election in manifest")
+    url = "https://elections.govmap.gov.il/data/votes/%s/municipal_data.json" % e.get("path", "latest")
+    raw = download(url, verbose=True)
+    if not raw.lstrip().startswith(b"{"):
+        raise SystemExit("govmap: data file not published yet (%d bytes, not JSON)" % len(raw))
+    g = json.loads(raw.decode("utf-8"))
+    parties = g.get("parties") or []
+    feats = g.get("features") or {}
+    totals = {k: 0 for k in ("בזב", "מצביעים", "פסולים", "כשרים")}
+    votes = {p: 0 for p in parties}
+    localities = 0
+    for f in feats.values():
+        if not isinstance(f, dict):
+            continue
+        localities += 1
+        for k in totals:
+            totals[k] += to_int(str(f.get(k, 0)))
+        for p in parties:
+            votes[p] += to_int(str(f.get(p, 0)))
+    if not localities or not totals["כשרים"]:
+        raise SystemExit("govmap: no counted localities yet")
+    t = g.get("totals") or {}
+    kal, kc = to_int(str(t.get("kalpi", 0))), to_int(str(t.get("kalpi_counted", 0)))
+    now = datetime.now(IL)
+    return {
+        "updated": now.isoformat(timespec="seconds"),
+        "updated_label": now.strftime("%H:%M"),
+        "source": url,
+        "status": "final" if (kal and kc >= kal) else "partial",
+        "localities": localities,
+        "eligible": totals["בזב"],
+        "voters": totals["מצביעים"],
+        "invalid": totals["פסולים"],
+        "valid": totals["כשרים"],
+        "letters": parties,
+        "votes": votes,
+        "kalpi": kal or None,
+        "kalpi_counted": kc or None,
+        "counted_pct": (round(kc / kal * 100, 1) if kal else None),
+        "votes_counted": t.get("votes_counted"),
+        "generated": g.get("generated"),
+    }
 
 
 def bulletin_slot(label):
@@ -116,6 +167,38 @@ def sector_estimates(day, sectors_path="live/sectors.json"):
             out[name] = round(W / E, 1)
             out[name + "_n"] = cnt
     return out or None
+
+
+V26_URL = "https://votes26.com/api/v1/elections/26/turnout"
+
+
+def update_turnout26(path):
+    """אחוזי הצבעה מ-votes26.com: דיווחים רשמיים לפי שעה + אומדני מגזרים מקלפיות מדגם. נשמר כמו שהוא ב-live/turnout26.json."""
+    raw = download(V26_URL + "?t=%d" % int(datetime.now().timestamp()))
+    d = json.loads(raw.decode("utf-8"))
+    if not isinstance(d.get("reports"), list):
+        raise SystemExit("votes26: unexpected format")
+    try:
+        old = json.load(open(path, encoding="utf-8"))
+        if old.get("updated_at_utc") == d.get("updated_at_utc") and len(old.get("reports", [])) == len(d["reports"]):
+            print("votes26 turnout unchanged (%s, %d reports)" % (d.get("updated_at_utc"), len(d["reports"])))
+            return
+    except Exception:
+        pass
+    # שומרים רק את מה שהדף צריך (הקובץ המלא גדול)
+    keep_n = ("now", "est", "prev", "lo", "hi", "reported", "stations", "coverage", "status", "eligible", "voters")
+    slim = {"schema_version": d.get("schema_version"), "updated_at_utc": d.get("updated_at_utc"),
+            "fetched": datetime.now(IL).isoformat(timespec="seconds"), "source": V26_URL, "reports": []}
+    for r in d["reports"]:
+        n = r.get("national") or {}
+        slim["reports"].append({
+            "at": r.get("at"), "hour": r.get("hour"),
+            "national": {k: n.get(k) for k in keep_n if k in n},
+            "sectors": [{k: s.get(k) for k in ("id", "now", "est", "prev", "eligible", "voters") if k in s} for s in (r.get("sectors") or [])],
+        })
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(slim, f, ensure_ascii=False, indent=1)
+    print("votes26 turnout written: %d reports, updated %s" % (len(d["reports"]), d.get("updated_at_utc")))
 
 
 def update_turnout(path):
@@ -166,17 +249,35 @@ def main():
             update_turnout(a.turnout)
         except Exception as e:
             print("turnout update failed:", e)
-    try:
+        try:
+            update_turnout26(os.path.join(os.path.dirname(a.turnout) or ".", "turnout26.json"))
+        except Exception as e:
+            print("votes26 turnout failed:", repr(e))
+    data = None
+    try:  # מקור ראשון: קובץ ועדת הבחירות
         raw = open(a.file, "rb").read() if a.file else download(a.url, verbose=True)
         if not raw.strip():
-            print("results file is empty (%d bytes) – nothing to summarize" % len(raw))
-            return 0
-        data = summarize(decode(raw), a.file or a.url)
+            print("CEC file is empty (%d bytes)" % len(raw))
+        else:
+            d = summarize(decode(raw), a.file or a.url)
+            if d["localities"] > 0:
+                data = d
+            else:
+                print("CEC file has headers only")
     except SystemExit as e:
-        print("results not usable:", e)
-        return 0
+        print("CEC file not usable:", e)
     except Exception as e:
-        print("results download failed:", repr(e))
+        print("CEC download failed:", repr(e))
+    if data is None and not a.file:
+        try:  # מקור שני: GovMap
+            data = govmap_summary()
+            print("using GovMap: %d localities, %s%% of ballot boxes counted" % (data["localities"], data.get("counted_pct")))
+        except SystemExit as e:
+            print("GovMap not usable:", e)
+        except Exception as e:
+            print("GovMap download failed:", repr(e))
+    if data is None:
+        print("no results from any source – nothing written")
         return 0
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     # לא לכתוב מחדש אם רק חותמת הזמן השתנתה
