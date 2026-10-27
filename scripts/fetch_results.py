@@ -13,10 +13,14 @@ META = ["סמל ועדה", "שם ישוב", "סמל ישוב", "בזב", "מצב
 IL = timezone(timedelta(hours=2))  # שעון חורף בישראל (27.10.2026)
 
 
-def download(url):
+def download(url, verbose=False):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
     with urllib.request.urlopen(req, timeout=60) as r:
-        return r.read()
+        body = r.read()
+        if verbose:
+            print("GET %s -> %s %s, %d bytes, final url %s" % (url, r.status, r.headers.get("Content-Type"), len(body), r.geturl()))
+            print("headers:", dict(r.headers))
+        return body
 
 
 def decode(raw):
@@ -126,9 +130,22 @@ def main():
     ap.add_argument("--no-turnout", action="store_true")
     a = ap.parse_args()
     if not a.no_turnout:
-        update_turnout(a.turnout)
-    raw = open(a.file, "rb").read() if a.file else download(a.url)
-    data = summarize(decode(raw), a.file or a.url)
+        try:
+            update_turnout(a.turnout)
+        except Exception as e:
+            print("turnout update failed:", e)
+    try:
+        raw = open(a.file, "rb").read() if a.file else download(a.url, verbose=True)
+        if not raw.strip():
+            print("results file is empty (%d bytes) – nothing to summarize" % len(raw))
+            return 0
+        data = summarize(decode(raw), a.file or a.url)
+    except SystemExit as e:
+        print("results not usable:", e)
+        return 0
+    except Exception as e:
+        print("results download failed:", repr(e))
+        return 0
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     # לא לכתוב מחדש אם רק חותמת הזמן השתנתה
     if os.path.exists(a.out):
