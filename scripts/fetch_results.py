@@ -10,6 +10,7 @@ from datetime import datetime, timezone, timedelta
 DEFAULT_URL = "https://media26.bechirot.gov.il/files/expc.csv"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 META = ["סמל ועדה", "שם ישוב", "סמל ישוב", "בזב", "מצביעים", "פסולים", "כשרים"]
+PLACES = {"3780": "ביתר עילית"}  # יישובים שמוצגים בנפרד בלוח החי
 IL = timezone(timedelta(hours=2))  # שעון חורף בישראל (27.10.2026)
 
 
@@ -54,6 +55,7 @@ def summarize(text, source):
     totals = {k: 0 for k in ("בזב", "מצביעים", "פסולים", "כשרים")}
     votes = {l: 0 for l in letters}
     localities = 0
+    places = {}
     for r in rows[1:]:
         if len(r) < len(META):
             continue
@@ -64,6 +66,11 @@ def summarize(text, source):
             i = idx[l]
             if i < len(r):
                 votes[l] += to_int(r[i])
+        code = r[idx["סמל ישוב"]].strip()
+        if code in PLACES:
+            places[code] = {"name": PLACES[code], "eligible": to_int(r[idx["בזב"]]), "voters": to_int(r[idx["מצביעים"]]),
+                            "invalid": to_int(r[idx["פסולים"]]), "valid": to_int(r[idx["כשרים"]]),
+                            "votes": {l: to_int(r[idx[l]]) for l in letters if idx[l] < len(r) and to_int(r[idx[l]]) > 0}}
     now = datetime.now(IL)
     return {
         "updated": now.isoformat(timespec="seconds"),
@@ -77,10 +84,11 @@ def summarize(text, source):
         "valid": totals["כשרים"],
         "letters": letters,
         "votes": votes,
+        "places": places,
     }
 
 
-DAY_URL = "https://navonyaniv.github.io/election-il-2026/results.json"
+DAY_URL ="https://navonyaniv.github.io/election-il-2026/results.json"
 GOVMAP_MANIFEST = "https://elections.govmap.gov.il/data/votes/elections.json"
 
 
@@ -101,7 +109,8 @@ def govmap_summary():
     totals = {k: 0 for k in ("בזב", "מצביעים", "פסולים", "כשרים")}
     votes = {p: 0 for p in parties}
     localities = 0
-    for f in feats.values():
+    places = {}
+    for code, f in feats.items():
         if not isinstance(f, dict):
             continue
         localities += 1
@@ -109,6 +118,10 @@ def govmap_summary():
             totals[k] += to_int(str(f.get(k, 0)))
         for p in parties:
             votes[p] += to_int(str(f.get(p, 0)))
+        if str(code) in PLACES:
+            places[str(code)] = {"name": PLACES[str(code)], "eligible": to_int(str(f.get("בזב", 0))), "voters": to_int(str(f.get("מצביעים", 0))),
+                                 "invalid": to_int(str(f.get("פסולים", 0))), "valid": to_int(str(f.get("כשרים", 0))),
+                                 "votes": {p: to_int(str(f.get(p, 0))) for p in parties if to_int(str(f.get(p, 0))) > 0}}
     if not localities or not totals["כשרים"]:
         raise SystemExit("govmap: no counted localities yet")
     t = g.get("totals") or {}
@@ -131,6 +144,7 @@ def govmap_summary():
         "counted_pct": (round(kc / kal * 100, 1) if kal else None),
         "votes_counted": t.get("votes_counted"),
         "generated": g.get("generated"),
+        "places": places,
     }
 
 
@@ -227,6 +241,16 @@ def update_turnout(path):
     if sectors and sec.get(slot) != sectors:
         sec[slot] = sectors
         changed = True
+    # יישובים נבחרים: אחוז ההצבעה שלהם לפי שעת הדיווח
+    towns = day.get("live_towns") or {}
+    pl = tj.setdefault("k26_places", {})
+    for code in PLACES:
+        t = towns.get(code)
+        if t and isinstance(t[0], (int, float)) and t[0] > 0:
+            cur = pl.setdefault(slot, {})
+            if cur.get(code) != [t[0], t[2] if len(t) > 2 else ""]:
+                cur[code] = [t[0], t[2] if len(t) > 2 else ""]
+                changed = True
     if not changed:
         print("turnout unchanged: %s %s%%" % (slot, pct))
         return

@@ -54,8 +54,21 @@ input[type=checkbox]{accent-color:var(--accent);margin:0;cursor:pointer}
 .lv-sect{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--ink2);margin:-2px 0 10px}
 .lv-sect b{color:var(--ink);font-weight:700}
 .lv-sect small{color:var(--ink3);font-size:11.5px}
+.lv-place{display:none;margin:0 0 10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;font-size:13px}
+.lv-place.on{display:block}
+.lv-place .ttl{font-weight:700;margin-inline-end:8px}
+.lv-place b{font-weight:800}
+.lv-place small{color:var(--ink2)}
+.lv-place table{border-collapse:collapse;margin-top:6px;font-size:12.5px}
+.lv-place th{font-weight:600;color:var(--ink2);text-align:right;padding:2px 8px;border-bottom:1px solid var(--line)}
+.lv-place td{padding:2px 8px;text-align:right;white-space:nowrap}
+.lv-place td.n{text-align:left;direction:ltr}
 .lv-tbl tr.sel td{cursor:pointer}
 .lv-tbl tbody tr:not(.fin):hover td{background:var(--surface2)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:4px 10px;font-size:12.5px;font-weight:600;color:var(--ink2);cursor:pointer}
+.seg button+button{border-inline-start:1px solid var(--line2)}
+.seg button.on{background:var(--accent);color:#fff}
 .lv-cmp{font-size:13px;color:var(--ink2)}
 .lv-cmp b{color:var(--ink);font-weight:700}
 .lv-cmp .up{color:var(--ok);font-weight:700} .lv-cmp .down{color:var(--danger);font-weight:700}
@@ -244,8 +257,10 @@ details.steps .body{border-top:1px solid var(--line);padding:12px 14px;font-size
   <div class="lv-head">
     <div class="lv-big"><span class="lbl">אחוז הצבעה ארצי</span><b id="lvPct">—</b><span class="sub">נכון ל-</span><select class="hsel" id="lvHour" aria-label="שעת הדיווח"></select></div>
     <div class="lv-cmp" id="lvCmp"></div>
+    <div class="seg" id="cmpSeg" title="בסיס ההשוואה ל-2022"><button data-v="hour" class="on">אותה שעה ב-2022</button><button data-v="final">סוף היום 2022</button></div>
   </div>
   <div class="lv-sect" id="lvSect"></div>
+  <div class="lv-place" id="lvPlace"></div>
   <div class="lv-body">
     <div><svg class="lv-chart" id="lvChart" viewBox="0 0 600 190" role="img" aria-label="אחוז הצבעה לפי שעה, 2026 לעומת 2022"></svg><div class="lv-legend"><span><i></i>2026</span><span><i class="prev"></i>2022</span></div></div>
     <table class="lv-tbl" id="lvTbl"></table>
@@ -727,6 +742,48 @@ const FULL_ELIGIBLE=7331981;
 const TURNOUT_URL='live/turnout.json', SECTORS_URL='live/sectors.json', T26_URL='live/turnout26.json';
 const live={data:null, day:null, turnout:null, t26:null, sectors:null, sel:null, timer:null};
 const SECTOR_NAMES={general:'כללי (יהודי לא חרדי)', haredi:'חרדים', arab:'ערבים', judea_samaria:'יהודה ושומרון', christian:'נוצרים', druze:'דרוזים'};
+// השוואה ל-2022: 'hour' = אותה שעה, 'final' = סוף היום. לארצי יש נתון שעתי אמיתי; למגזרים וליישוב – אומדן: סופי 2022 × הקצב הארצי של 2022 באותה שעה.
+const K25_FINAL=70.63;
+const cmpMode=()=> S.cmp==='final'? 'final' : 'hour';
+function hoursOf(x){ // "16:41" | ISO | number -> שעה עשרונית
+  if(typeof x==='number') return x;
+  if(!x) return NaN;
+  const m=/^(\d{1,2}):(\d{2})/.exec(x); if(m) return parseInt(m[1],10)+parseInt(m[2],10)/60;
+  const d=new Date(x); return isNaN(d)? NaN : d.getHours()+d.getMinutes()/60;
+}
+function nat25At(h){ // אחוז ההצבעה הארצי ב-2022 בשעה נתונה (אינטרפולציה בין דיווחי הוועדה; 07:00 = 0)
+  const k25=(live.turnout&&live.turnout.k25)||{}; const pts=[[7,0]];
+  HOURS.forEach(s=>{ if(k25[s]!=null) pts.push([parseInt(s,10),k25[s]]); });
+  if(!isFinite(h)) return NaN; if(h<=7) return 0; if(h>=pts[pts.length-1][0]) return pts[pts.length-1][1];
+  for(let i=1;i<pts.length;i++){ const [h0,v0]=pts[i-1],[h1,v1]=pts[i]; if(h<=h1) return v0+(v1-v0)*(h-h0)/(h1-h0); }
+  return NaN;
+}
+function ref25(finalPct,atHours){ // ערך 2022 להשוואה לפי המכוון: {v, approx, label}
+  if(cmpMode()==='final') return {v:finalPct, approx:false, label:'בסוף 2022'};
+  const r=nat25At(atHours)/K25_FINAL; if(!isFinite(r)) return {v:finalPct, approx:false, label:'בסוף 2022'};
+  return {v:Math.round(finalPct*r*10)/10, approx:true, label:'ב-2022 באותה שעה, משוער'};
+}
+// יישוב מוצג בנפרד: ביתר עילית, עם נתוני 2022 להשוואה (ועדת הבחירות, expc.csv של הכנסת ה-25)
+const PLACE={code:'3780', name:'ביתר עילית', k25:{eligible:29318, voters:23847, turnout:81.3, valid:23688, votes:{'ג':14081,'שס':7303,'ב':1844,'מחל':328}}};
+function renderPlace(sel,last){
+  const box=$('lvPlace'); let h='';
+  // אחוז הצבעה ביום הבחירות
+  const rec=(live.turnout&&live.turnout.k26_places&&live.turnout.k26_places[sel]&&live.turnout.k26_places[sel][PLACE.code])||null;
+  const now=(sel===last && live.day && live.day.live_towns && live.day.live_towns[PLACE.code])||null;
+  const t= rec? {pct:rec[0], at:rec[1]} : (now? {pct:now[0], at:now[2]} : null);
+  if(t){ const r=ref25(PLACE.k25.turnout, hoursOf(t.at)); h+=`<span class="ttl">${PLACE.name}</span> אחוז הצבעה <b>${t.pct}%</b> <small>נכון ל-${esc(t.at||'')} · ${r.label}: ${r.approx?'≈':''}${r.v}%</small>`; }
+  // תוצאות הספירה ביישוב
+  const p=live.data && live.data.status!=='no_data' && live.data.places && live.data.places[PLACE.code];
+  if(p && p.valid){
+    const byLetter={}; S.lists.forEach(l=>{ if(l.letter) byLetter[l.letter.trim()]=l; });
+    const top=Object.entries(p.votes||{}).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    h+=(h?'<br>':'')+`<span class="ttl">${PLACE.name}, ספירה:</span> הצביעו <b>${fmt(p.voters)}</b> מתוך ${fmt(p.eligible)} (${p.eligible?pct1(p.voters/p.eligible):'—'}) · כשרים ${fmt(p.valid)}`;
+    h+=`<table><tr><th>רשימה</th><th class="n">קולות</th><th class="n">%</th><th class="n">2022</th></tr>`;
+    top.forEach(([letter,n])=>{ const l=byLetter[letter]; const nm=l? (SHORT[l.id]||l.name) : letter; const p25=PLACE.k25.votes[letter]; h+=`<tr><td>${esc(nm)} <small>${esc(letter)}</small></td><td class="n num">${fmt(n)}</td><td class="n num">${pct1(n/p.valid)}</td><td class="n num">${p25!=null? pct1(p25/PLACE.k25.valid):'—'}</td></tr>`; });
+    h+=`</table>`;
+  }
+  box.innerHTML=h; box.classList.toggle('on', !!h);
+}
 const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
 async function fetchJSON(u){ const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); return r.json(); }
 const slotOf=label=>{ const m=/^(\d{1,2}):/.exec(label||''); if(!m) return null; let h=parseInt(m[1],10); h-=h%2; return (h<10?'0':'')+h+':00'; };
@@ -770,26 +827,31 @@ function renderLive(){
   // בחירת שעה + מספר גדול + השוואה
   const hs=$('lvHour');
   hs.innerHTML=slots.map(h=>`<option value="${h}" ${h===sel?'selected':''}>${h==='22:00'?'סגירה':h}</option>`).join('');
+  document.querySelectorAll('#cmpSeg button').forEach(b=>b.classList.toggle('on', b.dataset.v===cmpMode()));
   if(sel){
     $('lvPct').textContent=s26[sel]+'%';
-    const p=s25[sel];
-    $('lvCmp').innerHTML= p!=null? `ב-2022 באותה שעה <b>${p}%</b> · הפרש <span class="${s26[sel]>=p?'up':'down'}">${s26[sel]>=p?'+':''}${(s26[sel]-p).toFixed(1)}</span>` : '';
+    const p= cmpMode()==='final'? (fin['2022']||K25_FINAL) : s25[sel];
+    const lab= cmpMode()==='final'? 'בסוף היום ב-2022' : 'ב-2022 באותה שעה';
+    $('lvCmp').innerHTML= p!=null? `${lab} <b>${p}%</b> · הפרש <span class="${s26[sel]>=p?'up':'down'}">${s26[sel]>=p?'+':''}${(s26[sel]-p).toFixed(1)}</span>` : '';
   } else { $('lvPct').textContent='—'; $('lvCmp').textContent=''; }
   // אומדן מגזרי
   const v26=t26Sectors();
   if(v26 && sel===last){
     const pick=['haredi','arab','judea_samaria','general'];
-    const rows=pick.map(id=>{ const x=v26.list.find(s=>s.id===id); return x? `<span>${SECTOR_NAMES[id]||id} <b>${(x.now*100).toFixed(1)}%</b> <small>(בסוף 2022: ${(x.prev*100).toFixed(1)}%)</small></span>` : ''; }).join('');
-    $('lvSect').innerHTML=`<span><small>מגזרים, אומדן מקלפיות מדגם${v26.label?' נכון ל-'+v26.label:''}${v26.reported?' · '+fmt(v26.reported)+' מתוך '+fmt(v26.stations)+' קלפיות':''}:</small></span>`+rows;
+    const atH=hoursOf(v26.label);
+    const rows=pick.map(id=>{ const x=v26.list.find(s=>s.id===id); if(!x) return ''; const r=ref25(x.prev*100, atH); return `<span>${SECTOR_NAMES[id]||id} <b>${(x.now*100).toFixed(1)}%</b> <small>(${r.label}: ${r.approx?'≈':''}${r.v.toFixed(1)}%)</small></span>`; }).join('');
+    $('lvSect').innerHTML=`<span><small>מגזרים, אומדן מקלפיות מדגם${v26.label?' נכון ל-'+v26.label:''}${v26.reported?' · '+fmt(v26.reported)+(v26.stations&&v26.reported<=v26.stations?' מתוך '+fmt(v26.stations):'')+' קלפיות':''}:</small></span>`+rows;
   } else {
     const recorded=(live.turnout&&live.turnout.k26_sectors)||{};
     const est= recorded[sel] || (sel===last? sectorNow() : null);
     const sc=live.sectors;
     if(est && sc){
-      const row=(k,label)=> est[k]!=null? `<span>${label} <b>${est[k]}%</b> <small>(${est[k+'_n']} יישובים · בסוף 2022: ${sc[k].turnout2022}%)</small></span>` : '';
+      const atH= sel? parseInt(sel,10)+0.75 : NaN;
+      const row=(k,label)=>{ if(est[k]==null) return ''; const r=ref25(sc[k].turnout2022, atH); return `<span>${label} <b>${est[k]}%</b> <small>(${est[k+'_n']} יישובים · ${r.label}: ${r.approx?'≈':''}${r.v}%)</small></span>`; };
       $('lvSect').innerHTML=`<span><small>אומדן לפי יישובים ברובם:</small></span>`+row('haredi','חרדים')+row('arab','ערבים');
     } else $('lvSect').innerHTML='';
   }
+  renderPlace(sel,last);
   // גרף
   const W=600,H=190,L=34,R=16,T=12,B=26, maxY=80;
   const X=h=>L+(parseInt(h,10)-10)/12*(W-L-R), Y=p=>T+(1-p/maxY)*(H-T-B);
@@ -830,6 +892,7 @@ function applyLive(){
 }
 $('btnLive').onclick=()=>{ applyLive(); window.scrollTo(0,0); };
 $('lvHour').addEventListener('change',e=>{ live.sel=e.target.value; renderLive(); });
+$('cmpSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.cmp=b.dataset.v; save(); renderLive(); });
 $('lvTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.sel'); if(tr){ live.sel=tr.dataset.h; renderLive(); } });
 $('liveAuto').addEventListener('change',e=>{ S.liveAuto=e.target.checked; save(); if(S.liveAuto) refreshLive(); });
 function startLive(){ refreshLive(); clearInterval(live.timer); live.timer=setInterval(refreshLive, 120000); }
