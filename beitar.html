@@ -53,6 +53,8 @@ tr.now td{font-weight:700;background:var(--accent-soft)}
 
 <script>
 'use strict';
+// ערים חרדיות להשוואה (סוף יום 2022 לפי קובץ התוצאות של ועדת הבחירות)
+const CITIES=[{code:'3780',name:'ביתר עילית',k25:81.3},{code:'6100',name:'בני ברק',k25:76.5},{code:'1309',name:'אלעד',k25:84.4},{code:'3797',name:'מודיעין עילית',k25:82.0},{code:'2610',name:'בית שמש',k25:66.1},{code:'3000',name:'ירושלים',k25:61.6}];
 const PLACE={code:'3780', name:'ביתר עילית', eligible26:34945, k25:{eligible:29318, voters:23847, turnout:81.3, valid:23688, votes:{'ג':14081,'שס':7303,'ב':1844,'מחל':328}}};
 const PARTY_NAMES={'ג':'יהדות התורה','שס':'ש"ס','ב':'עוצמה יהודית','מחל':'הליכוד','ט':'הציונות הדתית','זך':'הציבור החרדי','נר':'צבע שחור','דרך':'ישר!','אמת':'הדמוקרטים','רק':'ביחד','ל':'ישראל ביתנו','ך':'עמך ישראל','די':'המילואימניקים','עם':'רע"ם','ודם':'המשותפת'};
 const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
@@ -134,6 +136,12 @@ async function main(){
   { const d= finalPct26!=null? finalPct26-PLACE.k25.turnout : null;
     h+=`<tr><td><b>סוף יום</b></td><td class="n">${finalPct26!=null?`<b>${finalPct26.toFixed(1)}%</b>`:'—'}</td><td class="n">${finalPct26!=null?fmt(p.voters):'—'}</td><td class="n"><b>${PLACE.k25.turnout}%</b> <span style="color:#9a9488">(${fmt(PLACE.k25.voters)})</span></td><td class="n ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td><td class="n">${RES&&RES.status==='final'&&RES.eligible? (RES.voters/RES.eligible*100).toFixed(1)+'%':'—'}</td></tr>`; }
   h+=`</table>`;
+  // השוואה לערים חרדיות: אחוזים בלבד, שורה לשעה, עמודה לעיר
+  h+=`<h2>השוואה לערים חרדיות</h2><table class="num" style="margin-top:12px"><tr><th>שעה</th>${CITIES.map(c=>`<th class="n">${esc(c.name)}</th>`).join('')}<th class="n">ארצי</th></tr>`;
+  slots.forEach(hh=>{ const cells=CITIES.map(c=>{ const r=rec[hh]&&rec[hh][c.code]; return `<td class="n">${r?(c.code===PLACE.code?`<b>${r[0].toFixed(1)}%</b>`:r[0].toFixed(1)+'%'):'—'}</td>`; }).join('');
+    h+=`<tr><td>${hh}</td>${cells}<td class="n">${nat26[hh]!=null?nat26[hh]+'%':'—'}</td></tr>`; });
+  h+=`<tr><td><b>סוף יום 2022</b></td>${CITIES.map(c=>`<td class="n">${c.k25.toFixed(1)}%</td>`).join('')}<td class="n">${K25_FINAL.toFixed(1)}%</td></tr></table>
+    <div class="note">נתוני השעות: דיווחי ועדת הבחירות לפי קלפי (09:00, 12:00, 16:00, 20:00) והדיווחים היישוביים השוטפים. שורת 2022: אחוז ההצבעה הסופי מתוך בז"ב.</div>`;
   // תוצאות
   if(p && p.valid){
     const top=Object.entries(p.votes||{}).sort((a,b)=>b[1]-a[1]);

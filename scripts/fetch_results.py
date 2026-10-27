@@ -10,7 +10,9 @@ from datetime import datetime, timezone, timedelta
 DEFAULT_URL = "https://media26.bechirot.gov.il/files/expc.csv"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 META = ["סמל ועדה", "שם ישוב", "סמל ישוב", "בזב", "מצביעים", "פסולים", "כשרים"]
-PLACES = {"3780": "ביתר עילית"}  # יישובים שמוצגים בנפרד בלוח החי
+PLACES = {  # יישובים שמוצגים בנפרד בלוח החי ובדוח ביתר (השוואה לערים חרדיות)
+    "3780": "ביתר עילית", "6100": "בני ברק", "1309": "אלעד", "3797": "מודיעין עילית", "2610": "בית שמש", "3000": "ירושלים",
+}
 IL = timezone(timedelta(hours=2))  # שעון חורף בישראל (27.10.2026)
 
 
