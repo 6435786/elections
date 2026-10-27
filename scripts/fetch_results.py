@@ -94,6 +94,30 @@ def bulletin_slot(label):
         return None
 
 
+def sector_estimates(day, sectors_path="live/sectors.json"):
+    """אומדן אחוז הצבעה ביישובים ערביים/חרדיים ברובם: ממוצע משוקלל (בעלי זכות בחירה 2022) של נתוני היישובים בהזנה."""
+    try:
+        sectors = json.load(open(sectors_path, encoding="utf-8"))
+    except Exception:
+        return None
+    towns = day.get("live_towns") or {}
+    out = {}
+    for name in ("arab", "haredi"):
+        codes = sectors.get(name, {}).get("codes", {})
+        E = W = 0
+        cnt = 0
+        for code, elig in codes.items():
+            t = towns.get(code)
+            if t and isinstance(t[0], (int, float)) and t[0] > 0:
+                E += elig
+                W += t[0] * elig
+                cnt += 1
+        if E:
+            out[name] = round(W / E, 1)
+            out[name + "_n"] = cnt
+    return out or None
+
+
 def update_turnout(path):
     """מוסיף ל-live/turnout.json את אחוז ההצבעה האחרון שפורסם (דרך הזנת election-il-2026)."""
     try:
@@ -111,10 +135,18 @@ def update_turnout(path):
     except Exception:
         tj = {"k26": {}}
     k26 = tj.setdefault("k26", {})
-    if k26.get(slot) == pct:
+    sectors = sector_estimates(day)
+    sec = tj.setdefault("k26_sectors", {})
+    changed = False
+    if k26.get(slot) != pct:
+        k26[slot] = pct
+        changed = True
+    if sectors and sec.get(slot) != sectors:
+        sec[slot] = sectors
+        changed = True
+    if not changed:
         print("turnout unchanged: %s %s%%" % (slot, pct))
         return
-    k26[slot] = pct
     tj["updated"] = datetime.now(IL).isoformat(timespec="seconds")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(tj, f, ensure_ascii=False, indent=1)

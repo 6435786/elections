@@ -50,6 +50,12 @@ input[type=checkbox]{accent-color:var(--accent);margin:0;cursor:pointer}
 .lv-big .lbl{font-weight:700;font-size:14px}
 .lv-big b{font-size:30px;font-weight:800;line-height:1;color:var(--accent)}
 .lv-big .sub{color:var(--ink2);font-size:12.5px}
+.hsel{border:1px solid var(--line2);border-radius:6px;background:var(--surface2);font-weight:700;font-size:13px;padding:2px 6px;color:var(--ink);cursor:pointer}
+.lv-sect{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--ink2);margin:-2px 0 10px}
+.lv-sect b{color:var(--ink);font-weight:700}
+.lv-sect small{color:var(--ink3);font-size:11.5px}
+.lv-tbl tr.sel td{cursor:pointer}
+.lv-tbl tbody tr:not(.fin):hover td{background:var(--surface2)}
 .lv-cmp{font-size:13px;color:var(--ink2)}
 .lv-cmp b{color:var(--ink);font-weight:700}
 .lv-cmp .up{color:var(--ok);font-weight:700} .lv-cmp .down{color:var(--danger);font-weight:700}
@@ -236,9 +242,10 @@ details.steps .body{border-top:1px solid var(--line);padding:12px 14px;font-size
 
 <div class="live num" id="live">
   <div class="lv-head">
-    <div class="lv-big"><span class="lbl">אחוז הצבעה ארצי</span><b id="lvPct">—</b><span class="sub" id="lvSub"></span></div>
+    <div class="lv-big"><span class="lbl">אחוז הצבעה ארצי</span><b id="lvPct">—</b><span class="sub">נכון ל-</span><select class="hsel" id="lvHour" aria-label="שעת הדיווח"></select></div>
     <div class="lv-cmp" id="lvCmp"></div>
   </div>
+  <div class="lv-sect" id="lvSect"></div>
   <div class="lv-body">
     <div><svg class="lv-chart" id="lvChart" viewBox="0 0 600 190" role="img" aria-label="אחוז הצבעה לפי שעה, 2026 לעומת 2022"></svg><div class="lv-legend"><span><i></i>2026</span><span><i class="prev"></i>2022</span></div></div>
     <table class="lv-tbl" id="lvTbl"></table>
@@ -717,16 +724,17 @@ $('btnAddPoll').onclick=()=>{
 const LIVE_URL='live/results.json';                                        // נכתב ע"י GitHub Actions מקובץ expc.csv של ועדת הבחירות
 const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json'; // אחוז הצבעה במהלך היום (הזנה פתוחה שמעתיקה את נתוני הוועדה)
 const FULL_ELIGIBLE=7331981;
-const TURNOUT_URL='live/turnout.json';
-const live={data:null, day:null, turnout:null, timer:null};
+const TURNOUT_URL='live/turnout.json', SECTORS_URL='live/sectors.json';
+const live={data:null, day:null, turnout:null, sectors:null, sel:null, timer:null};
 const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
 async function fetchJSON(u){ const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); return r.json(); }
 const slotOf=label=>{ const m=/^(\d{1,2}):/.exec(label||''); if(!m) return null; let h=parseInt(m[1],10); h-=h%2; return (h<10?'0':'')+h+':00'; };
 async function refreshLive(){
-  const [a,b,c]=await Promise.allSettled([fetchJSON(LIVE_URL), fetchJSON(TURNOUT_URL), fetchJSON(DAY_URL)]);
+  const [a,b,c,d]=await Promise.allSettled([fetchJSON(LIVE_URL), fetchJSON(TURNOUT_URL), fetchJSON(DAY_URL), live.sectors? Promise.resolve(live.sectors) : fetchJSON(SECTORS_URL)]);
   live.data= a.status==='fulfilled'? a.value : null;
   live.turnout= b.status==='fulfilled'? b.value : live.turnout;
   live.day= c.status==='fulfilled'? c.value : null;
+  live.sectors= d.status==='fulfilled'? d.value : live.sectors;
   renderLive();
   if(S.liveAuto && live.data && live.data.status!=='no_data' && live.data.updated!==S.liveApplied) applyLive();
 }
@@ -736,19 +744,35 @@ function series26(){
   if(slot && t.pct>0 && s[slot]==null) s[slot]=t.pct;
   return s;
 }
+function sectorNow(){ // אומדן מגזרי מנתוני היישובים בהזנה (ממוצע משוקלל לפי בעלי זכות בחירה 2022)
+  const towns=live.day&&live.day.live_towns, sec=live.sectors; if(!towns||!sec) return null;
+  const out={};
+  ['arab','haredi'].forEach(k=>{ let E=0,W=0,n=0; Object.entries(sec[k].codes).forEach(([code,e])=>{ const t=towns[code]; if(t&&t[0]>0){E+=e;W+=t[0]*e;n++;} }); if(E){ out[k]=Math.round(W/E*10)/10; out[k+'_n']=n; } });
+  return Object.keys(out).length? out : null;
+}
 function renderLive(){
   const box=$('live'), d=live.data, has=d && d.status!=='no_data';
   const s26=series26(), s25=(live.turnout&&live.turnout.k25)||{}, fin=(live.turnout&&live.turnout.final)||{};
   const slots=HOURS.filter(h=>s26[h]!=null); const last=slots[slots.length-1];
   box.classList.toggle('on', !!(has || last));
   if(!box.classList.contains('on')) return;
-  // מספר גדול + השוואה
-  if(last){
-    $('lvPct').textContent=s26[last]+'%';
-    $('lvSub').textContent= last==='22:00'? 'בסגירת הקלפיות' : `נכון ל-${last}`;
-    const p=s25[last];
-    $('lvCmp').innerHTML= p!=null? `ב-2022 באותה שעה <b>${p}%</b> · הפרש <span class="${s26[last]>=p?'up':'down'}">${s26[last]>=p?'+':''}${(s26[last]-p).toFixed(1)}</span>` : '';
-  } else { $('lvPct').textContent='—'; $('lvSub').textContent=''; $('lvCmp').textContent=''; }
+  const sel= (live.sel && s26[live.sel]!=null)? live.sel : last;
+  // בחירת שעה + מספר גדול + השוואה
+  const hs=$('lvHour');
+  hs.innerHTML=slots.map(h=>`<option value="${h}" ${h===sel?'selected':''}>${h==='22:00'?'סגירה':h}</option>`).join('');
+  if(sel){
+    $('lvPct').textContent=s26[sel]+'%';
+    const p=s25[sel];
+    $('lvCmp').innerHTML= p!=null? `ב-2022 באותה שעה <b>${p}%</b> · הפרש <span class="${s26[sel]>=p?'up':'down'}">${s26[sel]>=p?'+':''}${(s26[sel]-p).toFixed(1)}</span>` : '';
+  } else { $('lvPct').textContent='—'; $('lvCmp').textContent=''; }
+  // אומדן מגזרי
+  const recorded=(live.turnout&&live.turnout.k26_sectors)||{};
+  const est= recorded[sel] || (sel===last? sectorNow() : null);
+  const sc=live.sectors;
+  if(est && sc){
+    const row=(k,label)=> est[k]!=null? `<span>${label} <b>${est[k]}%</b> <small>(${est[k+'_n']} יישובים · בסוף 2022: ${sc[k].turnout2022}%)</small></span>` : '';
+    $('lvSect').innerHTML=`<span><small>אומדן לפי יישובים ברובם:</small></span>`+row('haredi','חרדים')+row('arab','ערבים');
+  } else $('lvSect').innerHTML='';
   // גרף
   const W=600,H=190,L=34,R=16,T=12,B=26, maxY=80;
   const X=h=>L+(parseInt(h,10)-10)/12*(W-L-R), Y=p=>T+(1-p/maxY)*(H-T-B);
@@ -761,7 +785,7 @@ function renderLive(){
   // טבלה
   let t=`<tr><th>שעה</th><th>2026</th><th>2022</th><th>הפרש</th></tr>`;
   HOURS.forEach(h=>{ const a=s26[h], b=s25[h]; const dcls= a!=null&&b!=null? (a>=b?'up':'down') : ''; const dv= a!=null&&b!=null? (a>=b?'+':'')+(a-b).toFixed(1) : '—';
-    t+=`<tr class="${h===last?'now':''}"><td>${h==='22:00'?'סגירה':h}</td><td>${a!=null?a+'%':'—'}</td><td>${b!=null?b+'%':'—'}</td><td class="${dcls}">${dv}</td></tr>`; });
+    t+=`<tr class="${h===sel?'now':''} ${a!=null?'sel':''}" data-h="${h}"><td>${h==='22:00'?'סגירה':h}</td><td>${a!=null?a+'%':'—'}</td><td>${b!=null?b+'%':'—'}</td><td class="${dcls}">${dv}</td></tr>`; });
   if(fin['2022']) t+=`<tr class="fin"><td>סופי (כולל מעטפות כפולות)</td><td>${has&&d.eligible&&d.eligible>=FULL_ELIGIBLE*0.99? pct1(d.voters/d.eligible):'—'}</td><td>${fin['2022']}%</td><td></td></tr>`;
   $('lvTbl').innerHTML=t;
   // תוצאות
@@ -787,6 +811,8 @@ function applyLive(){
   S.liveApplied=d.updated; render(); renderLive();
 }
 $('btnLive').onclick=()=>{ applyLive(); window.scrollTo(0,0); };
+$('lvHour').addEventListener('change',e=>{ live.sel=e.target.value; renderLive(); });
+$('lvTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.sel'); if(tr){ live.sel=tr.dataset.h; renderLive(); } });
 $('liveAuto').addEventListener('change',e=>{ S.liveAuto=e.target.checked; save(); if(S.liveAuto) refreshLive(); });
 function startLive(){ refreshLive(); clearInterval(live.timer); live.timer=setInterval(refreshLive, 120000); }
 
