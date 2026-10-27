@@ -225,6 +225,88 @@ def nearest_slot(label):
     best = min((10, 12, 14, 16, 18, 20, 22), key=lambda H: abs(minutes - H * 60))
     return "%02d:00" % best, abs(minutes - best * 60)
 
+# ---- קובצי "שיעור ההצבעה בכל קלפי" של ועדת הבחירות (gov.il), נאספים ב-9:00, 12:00, 16:00, 20:00 ----
+GOV_XLSX = "https://www.gov.il/BlobFolder/generalpage/turnout_at_polling_stations/he/voter_turnout_%s.xlsx"
+GOV_HOURS = ("09", "12", "16", "20")
+
+
+def read_xlsx_rows(data):
+    """קורא גיליון ראשון מקובץ xlsx (ספרייה סטנדרטית בלבד): רשימת מילונים {עמודה: ערך}."""
+    import zipfile, re as _re
+    from xml.etree import ElementTree as ET
+    z = zipfile.ZipFile(io.BytesIO(data))
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ss = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(ns + "si"):
+            ss.append("".join(t.text or "" for t in si.iter(ns + "t")))
+    sheet = sorted(n for n in z.namelist() if n.startswith("xl/worksheets/sheet"))[0]
+    rows = []
+    for r in ET.fromstring(z.read(sheet)).iter(ns + "row"):
+        row = {}
+        for c in r.findall(ns + "c"):
+            col = _re.match(r"[A-Z]+", c.get("r")).group(0)
+            v = c.find(ns + "v")
+            if v is None:
+                isv = c.find(ns + "is")
+                row[col] = "".join(t.text or "" for t in isv.iter(ns + "t")) if isv is not None else None
+            else:
+                row[col] = ss[int(v.text)] if c.get("t") == "s" else v.text
+        rows.append(row)
+    return rows
+
+
+def update_places_official(path):
+    """מצרף ל-turnout.json את אחוז ההצבעה הרשמי של היישובים הנבחרים מקובצי הקלפיות (09/12/16/20)."""
+    try:
+        tj = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        tj = {}
+    done = tj.setdefault("official_files", {})
+    pl = tj.setdefault("k26_places", {})
+    off = tj.setdefault("k26_places_official", {})
+    changed = False
+    for hh in GOV_HOURS:
+        if hh in done:
+            continue
+        try:
+            data = download(GOV_XLSX % hh)
+        except Exception as e:
+            print("gov.il file %s not available yet (%s)" % (hh, getattr(e, "code", e)))
+            continue
+        if not data.startswith(b"PK"):
+            print("gov.il file %s is not xlsx yet" % hh)
+            continue
+        rows = read_xlsx_rows(data)[1:]
+        f = lambda x: float(x) if x not in (None, "") else 0.0
+        for code, name in PLACES.items():
+            b = [r for r in rows if (r.get("A") or "").strip() == code]
+            if not b:
+                continue
+            e = sum(f(r.get("E")) for r in b)
+            v = sum(f(r.get("F")) for r in b)
+            times = sorted(f(r.get("H")) for r in b if r.get("H"))
+            med = times[len(times) // 2] if times else 0
+            label = "%02d:%02d" % (int(med * 24), int(round((med * 24 - int(med * 24)) * 60)))
+            pct = round(v / e * 100, 1) if e else 0
+            slot = "%s:00" % hh
+            off.setdefault(slot, {})[code] = {"pct": pct, "voters": int(v), "eligible": int(e), "stations": len(b), "reported": label}
+            # גם לטבלת השעות: השעה הזוגית הקרובה, עם מספרי המצביעים הרשמיים
+            pslot, dist = nearest_slot(label)
+            cur = pl.setdefault(pslot, {})
+            old = cur.get(code)
+            if old is None or nearest_slot(old[1])[1] is None or dist <= nearest_slot(old[1])[1]:
+                cur[code] = [pct, label, int(v), int(e)]
+            elif old and len(old) < 4 and old[0] == pct:  # אותו ערך מההזנה – מצרפים את מספרי המצביעים הרשמיים
+                cur[code] = [old[0], old[1], int(v), int(e)]
+            print("official %s %s: %s%% (%d/%d, %d stations, reported ~%s)" % (hh, name, pct, v, e, len(b), label))
+        done[hh] = datetime.now(IL).isoformat(timespec="seconds")
+        changed = True
+    if changed:
+        tj["updated"] = datetime.now(IL).isoformat(timespec="seconds")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(tj, fh, ensure_ascii=False, indent=1)
+
 
 def update_turnout(path):
     """מוסיף ל-live/turnout.json את אחוז ההצבעה האחרון שפורסם (דרך הזנת election-il-2026)."""
@@ -295,6 +377,10 @@ def main():
             update_turnout26(os.path.join(os.path.dirname(a.turnout) or ".", "turnout26.json"))
         except Exception as e:
             print("votes26 turnout failed:", repr(e))
+        try:
+            update_places_official(a.turnout)
+        except Exception as e:
+            print("official station files failed:", repr(e))
     data = None
     try:  # מקור ראשון: קובץ ועדת הבחירות
         raw = open(a.file, "rb").read() if a.file else download(a.url, verbose=True)

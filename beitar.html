@@ -95,7 +95,7 @@ async function main(){
   // ארצי 2026 לפי שעה
   const nat26={}; Object.assign(nat26, T.k26||{}); (T26&&T26.reports||[]).forEach(r=>{ if(Number.isInteger(r.hour)&&r.national&&r.national.now>0) nat26[(r.hour<10?'0':'')+r.hour+':00']=Math.round(r.national.now*1000)/10; });
   // ביתר לפי שעה
-  const rec=T.k26_places||{}; const rows=[]; HOURS.forEach(h=>{ const r=rec[h]&&rec[h][PLACE.code]; if(r) rows.push({h, pct:r[0], at:r[1]}); });
+  const rec=T.k26_places||{}; const rows=[]; HOURS.forEach(h=>{ const r=rec[h]&&rec[h][PLACE.code]; if(r) rows.push({h, pct:r[0], at:r[1], voters:r[2], elig:r[3]}); });
   const p=RES && RES.status!=='no_data' && RES.places && RES.places[PLACE.code];
   const elig=(p&&p.eligible)||PLACE.eligible26;
   const last=rows[rows.length-1];
@@ -104,7 +104,7 @@ async function main(){
   h+=`<h1>${PLACE.name} – בחירות לכנסת ה-26</h1><div class="sub">27.10.2026 · נתוני אחוזי הצבעה לפי שעת הדיווח היישובי של ועדת הבחירות · הופק ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}</div>`;
   // KPI
   const curPct= p&&p.eligible? (p.voters/p.eligible*100) : (last? last.pct : null);
-  const curVoters= p&&p.eligible? p.voters : (last? Math.round(last.pct/100*elig) : null);
+  const curVoters= p&&p.eligible? p.voters : (last? (last.voters||Math.round(last.pct/100*elig)) : null);
   const curAt= p&&p.eligible? 'ספירה' : (last? `נכון ל-${last.at}` : '');
   const ref= last? nat25At(hoursOf(last.at))/K25_FINAL*PLACE.k25.turnout : null;
   h+=`<div class="kpis num">
@@ -130,7 +130,7 @@ async function main(){
   const finalPct26= p&&p.eligible? p.voters/p.eligible*100 : null;
   h+=`<table class="num" style="margin-top:12px"><tr><th>שעה</th><th class="n">ביתר 2026</th><th class="n">מצביעים</th><th class="n">ביתר 2022 באותה שעה</th><th class="n">הפער</th><th class="n">ארצי 2026</th></tr>`;
   slots.forEach((hh,i)=>{ const r=rows.find(x=>x.h===hh); const d= r? r.pct-s25[i] : null;
-    h+=`<tr class="${r&&r===last?'now':''}"><td>${hh}${r?` <span style="color:#9a9488">(${esc(r.at)})</span>`:''}</td><td class="n">${r?`<b>${r.pct}%</b>`:'—'}</td><td class="n">${r?'≈'+fmt(r.pct/100*elig):'—'}</td><td class="n">≈${s25[i]}%</td><td class="n ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td><td class="n">${nat26[hh]!=null?nat26[hh]+'%':'—'}</td></tr>`; });
+    h+=`<tr class="${r&&r===last?'now':''}"><td>${hh}${r?` <span style="color:#9a9488">(${esc(r.at)})</span>`:''}</td><td class="n">${r?`<b>${r.pct}%</b>`:'—'}</td><td class="n">${r?(r.voters?fmt(r.voters):'≈'+fmt(r.pct/100*elig)):'—'}</td><td class="n">≈${s25[i]}%</td><td class="n ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td><td class="n">${nat26[hh]!=null?nat26[hh]+'%':'—'}</td></tr>`; });
   { const d= finalPct26!=null? finalPct26-PLACE.k25.turnout : null;
     h+=`<tr><td><b>סוף יום</b></td><td class="n">${finalPct26!=null?`<b>${finalPct26.toFixed(1)}%</b>`:'—'}</td><td class="n">${finalPct26!=null?fmt(p.voters):'—'}</td><td class="n"><b>${PLACE.k25.turnout}%</b> <span style="color:#9a9488">(${fmt(PLACE.k25.voters)})</span></td><td class="n ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td><td class="n">${RES&&RES.status==='final'&&RES.eligible? (RES.voters/RES.eligible*100).toFixed(1)+'%':'—'}</td></tr>`; }
   h+=`</table>`;

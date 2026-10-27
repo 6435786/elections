@@ -804,7 +804,7 @@ function renderPlace(sel,last){
   const box=$('lvPlace'); let h='';
   // אחוזי הצבעה בביתר עילית לפי שעת דיווח: רישום היסטורי + הערך החי לשעה האחרונה
   const rec=(live.turnout&&live.turnout.k26_places)||{};
-  const rows={}; HOURS.forEach(hh=>{ const r=rec[hh]&&rec[hh][PLACE.code]; if(r) rows[hh]={pct:r[0], at:r[1]}; });
+  const rows={}; HOURS.forEach(hh=>{ const r=rec[hh]&&rec[hh][PLACE.code]; if(r) rows[hh]={pct:r[0], at:r[1], voters:r[2], elig:r[3]}; });
   const now=live.day&&live.day.live_towns&&live.day.live_towns[PLACE.code];
   if(now){ const m=/^(\d{1,2}):(\d{2})/.exec(now[2]||''); if(m){ const mins=parseInt(m[1],10)*60+parseInt(m[2],10); const H=[10,12,14,16,18,20,22].reduce((a,b)=>Math.abs(mins-b*60)<Math.abs(mins-a*60)?b:a); const ns=(H<10?'0':'')+H+':00'; if(!rows[ns]) rows[ns]={pct:now[0], at:now[2]}; } }
   const p=live.data && live.data.status!=='no_data' && live.data.places && live.data.places[PLACE.code];
@@ -815,7 +815,7 @@ function renderPlace(sel,last){
   h+=`<div><span class="ttl">${PLACE.name}</span> <small>בז"ב 2026: ${fmt(elig)}${eligNote} · בז"ב 2022: ${fmt(PLACE.k25.eligible)}</small></div>`;
   h+=`<table><tr><th>שעה</th><th class="n">ביתר 2026</th><th class="n">מצביעים</th><th class="n">ביתר 2022 באותה שעה</th><th class="n">הפער</th></tr>`;
   HOURS.filter(hh=>hh!=='22:00').forEach(hh=>{ const r=rows[hh]; const H=parseInt(hh,10); const ref=nat25At(r? hoursOf(r.at) : H)/K25_FINAL*PLACE.k25.turnout; const d= r? r.pct-ref : null;
-    h+=`<tr class="${hh===sel?'now':''}"><td>${hh}${r?` <small>(${esc(r.at||'')})</small>`:''}</td><td class="n num">${r?`<b>${r.pct}%</b>`:'—'}</td><td class="n num">${r?'≈'+fmt(r.pct/100*elig):'—'}</td><td class="n num">≈${ref.toFixed(1)}%</td><td class="n num ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td></tr>`; });
+    h+=`<tr class="${hh===sel?'now':''}"><td>${hh}${r?` <small>(${esc(r.at||'')})</small>`:''}</td><td class="n num">${r?`<b>${r.pct}%</b>`:'—'}</td><td class="n num">${r?(r.voters?fmt(r.voters):'≈'+fmt(r.pct/100*elig)):'—'}</td><td class="n num">≈${ref.toFixed(1)}%</td><td class="n num ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td></tr>`; });
   { const d= finalPct26!=null? finalPct26-PLACE.k25.turnout : null;
     h+=`<tr><td><b>סוף יום</b></td><td class="n num">${finalPct26!=null?`<b>${finalPct26.toFixed(1)}%</b>`:'—'}</td><td class="n num">${finalPct26!=null?fmt(p.voters):'—'}</td><td class="n num"><b>${PLACE.k25.turnout}%</b> <small>(${fmt(PLACE.k25.voters)})</small></td><td class="n num ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td></tr>`; }
   h+=`</table>`;
