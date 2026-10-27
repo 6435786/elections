@@ -806,7 +806,7 @@ function renderPlace(sel,last){
   const rec=(live.turnout&&live.turnout.k26_places)||{};
   const rows={}; HOURS.forEach(hh=>{ const r=rec[hh]&&rec[hh][PLACE.code]; if(r) rows[hh]={pct:r[0], at:r[1]}; });
   const now=live.day&&live.day.live_towns&&live.day.live_towns[PLACE.code];
-  if(now && last && !rows[last]) rows[last]={pct:now[0], at:now[2]};
+  if(now){ const m=/^(\d{1,2}):(\d{2})/.exec(now[2]||''); if(m){ const mins=parseInt(m[1],10)*60+parseInt(m[2],10); const H=[10,12,14,16,18,20,22].reduce((a,b)=>Math.abs(mins-b*60)<Math.abs(mins-a*60)?b:a); const ns=(H<10?'0':'')+H+':00'; if(!rows[ns]) rows[ns]={pct:now[0], at:now[2]}; } }
   const p=live.data && live.data.status!=='no_data' && live.data.places && live.data.places[PLACE.code];
   const elig= (p&&p.eligible)? p.eligible : PLACE.eligible26;   // בז"ב 2026: מקובץ התוצאות כשיתפרסם, עד אז לפי אינדקס votes26
   const eligNote= (p&&p.eligible)? '' : ' (2026)';

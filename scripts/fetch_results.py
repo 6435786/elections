@@ -215,6 +215,17 @@ def update_turnout26(path):
     print("votes26 turnout written: %d reports, updated %s" % (len(d["reports"]), d.get("updated_at_utc")))
 
 
+def nearest_slot(label):
+    """'16:41' -> ('16:00', 41); '17:30' -> ('18:00', 30): השעה הזוגית הקרובה והמרחק בדקות."""
+    try:
+        h, m = [int(x) for x in label.split(":")[:2]]
+    except Exception:
+        return None, None
+    minutes = h * 60 + m
+    best = min((10, 12, 14, 16, 18, 20, 22), key=lambda H: abs(minutes - H * 60))
+    return "%02d:00" % best, abs(minutes - best * 60)
+
+
 def update_turnout(path):
     """מוסיף ל-live/turnout.json את אחוז ההצבעה האחרון שפורסם (דרך הזנת election-il-2026)."""
     try:
@@ -241,16 +252,23 @@ def update_turnout(path):
     if sectors and sec.get(slot) != sectors:
         sec[slot] = sectors
         changed = True
-    # יישובים נבחרים: אחוז ההצבעה שלהם לפי שעת הדיווח
+    # יישובים נבחרים: הדיווח היישובי נרשם לשעה הזוגית הקרובה לשעה שלו (לא לשעת הדיווח הארצי),
+    # ולכל שעה נשמר הדיווח הקרוב ביותר לשעה העגולה
     towns = day.get("live_towns") or {}
     pl = tj.setdefault("k26_places", {})
     for code in PLACES:
         t = towns.get(code)
         if t and isinstance(t[0], (int, float)) and t[0] > 0:
-            cur = pl.setdefault(slot, {})
-            if cur.get(code) != [t[0], t[2] if len(t) > 2 else ""]:
-                cur[code] = [t[0], t[2] if len(t) > 2 else ""]
-                changed = True
+            tlabel = t[2] if len(t) > 2 else ""
+            pslot, dist = nearest_slot(tlabel)
+            if not pslot:
+                continue
+            cur = pl.setdefault(pslot, {})
+            old = cur.get(code)
+            if old != [t[0], tlabel]:
+                if old is None or nearest_slot(old[1])[1] is None or dist <= nearest_slot(old[1])[1]:
+                    cur[code] = [t[0], tlabel]
+                    changed = True
     if not changed:
         print("turnout unchanged: %s %s%%" % (slot, pct))
         return
