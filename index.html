@@ -318,8 +318,8 @@ details.steps .body{border-top:1px solid var(--line);padding:12px 14px;font-size
 <!-- ביתר עילית -->
 <div class="modal" id="mPlace">
   <div class="dlg" style="max-width:640px">
-    <div class="hd"><h3>ביתר עילית</h3><button class="btn small" data-close>סגור</button></div>
-    <div class="bd"><div class="lv-place on" id="lvPlace"></div><p class="help" style="margin-top:10px">אחוז הצבעה לפי שעת הדיווח היישובי של ועדת הבחירות. "2022 אותה שעה" משוער לפי הקצב הארצי של 2022 (לביתר יש מ-2022 רק נתון סוף יום). מספר המצביעים = האחוז כפול בז"ב 2026 (34,945 לפי votes26), עד שיתפרסם קובץ התוצאות.</p></div>
+    <div class="hd"><h3>ביתר עילית</h3><div class="inline"><a class="btn small primary" href="beitar.html" target="_blank" rel="noopener">דוח PDF</a><button class="btn small" data-close>סגור</button></div></div>
+    <div class="bd"><div class="lv-place on" id="lvPlace"></div><p class="help" style="margin-top:10px">2026: דיווח ועדת הבחירות לפי יישוב (בסוגריים השעה המדויקת של הדיווח). 2022 באותה שעה: משוער לפי הקצב הארצי של 2022, כי לביתר פורסם מ-2022 רק נתון סוף יום (81.3%). מצביעים = אחוז × בז"ב 2026.</p></div>
   </div>
 </div>
 
@@ -810,14 +810,15 @@ function renderPlace(sel,last){
   const p=live.data && live.data.status!=='no_data' && live.data.places && live.data.places[PLACE.code];
   const elig= (p&&p.eligible)? p.eligible : PLACE.eligible26;   // בז"ב 2026: מקובץ התוצאות כשיתפרסם, עד אז לפי אינדקס votes26
   const eligNote= (p&&p.eligible)? '' : ' (2026)';
-  const hs=HOURS.filter(hh=>rows[hh]);
-  if(hs.length){
-    h+=`<div><span class="ttl">${PLACE.name}</span> <small>בז"ב ${fmt(elig)}${eligNote} · בסוף 2022: ${PLACE.k25.turnout}% (${fmt(PLACE.k25.voters)} מתוך ${fmt(PLACE.k25.eligible)})</small></div>`;
-    h+=`<table><tr><th>שעה</th><th class="n">2026</th><th class="n">מצביעים</th><th class="n">2022 אותה שעה</th><th class="n">2022 סוף יום</th><th class="n">הפרש</th></tr>`;
-    hs.forEach(hh=>{ const r=rows[hh]; const at=hoursOf(r.at); const ref=nat25At(at)/K25_FINAL*PLACE.k25.turnout; const d=r.pct-ref;
-      h+=`<tr class="${hh===sel?'now':''}"><td>${hh==='22:00'?'סגירה':hh} <small>(${esc(r.at||'')})</small></td><td class="n num"><b>${r.pct}%</b></td><td class="n num">≈${fmt(r.pct/100*elig)}</td><td class="n num">≈${ref.toFixed(1)}%</td><td class="n num">${PLACE.k25.turnout}%</td><td class="n num ${d>=0?'up':'down'}">${d>=0?'+':''}${d.toFixed(1)}</td></tr>`; });
-    h+=`</table>`;
-  }
+  // טבלה קבועה: כל שעות הדיווח + סוף יום; מתמלאת בהמשך היום
+  const finalPct26= (p&&p.eligible)? p.voters/p.eligible*100 : null;
+  h+=`<div><span class="ttl">${PLACE.name}</span> <small>בז"ב 2026: ${fmt(elig)}${eligNote} · בז"ב 2022: ${fmt(PLACE.k25.eligible)}</small></div>`;
+  h+=`<table><tr><th>שעה</th><th class="n">ביתר 2026</th><th class="n">מצביעים</th><th class="n">ביתר 2022 באותה שעה</th><th class="n">הפער</th></tr>`;
+  HOURS.filter(hh=>hh!=='22:00').forEach(hh=>{ const r=rows[hh]; const H=parseInt(hh,10); const ref=nat25At(r? hoursOf(r.at) : H)/K25_FINAL*PLACE.k25.turnout; const d= r? r.pct-ref : null;
+    h+=`<tr class="${hh===sel?'now':''}"><td>${hh}${r?` <small>(${esc(r.at||'')})</small>`:''}</td><td class="n num">${r?`<b>${r.pct}%</b>`:'—'}</td><td class="n num">${r?'≈'+fmt(r.pct/100*elig):'—'}</td><td class="n num">≈${ref.toFixed(1)}%</td><td class="n num ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td></tr>`; });
+  { const d= finalPct26!=null? finalPct26-PLACE.k25.turnout : null;
+    h+=`<tr><td><b>סוף יום</b></td><td class="n num">${finalPct26!=null?`<b>${finalPct26.toFixed(1)}%</b>`:'—'}</td><td class="n num">${finalPct26!=null?fmt(p.voters):'—'}</td><td class="n num"><b>${PLACE.k25.turnout}%</b> <small>(${fmt(PLACE.k25.voters)})</small></td><td class="n num ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td></tr>`; }
+  h+=`</table>`;
   // תוצאות הספירה ביישוב
   if(p && p.valid){
     const byLetter={}; S.lists.forEach(l=>{ if(l.letter) byLetter[l.letter.trim()]=l; });

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ביתר עילית – בחירות לכנסת ה-26</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f7f6f2;--surface:#fff;--line:#e4e2d9;--line2:#d5d2c7;--ink:#2a2722;--ink2:#6e685e;--ink3:#9a9488;--accent:#136f73;--accent-soft:#e6f0ef;--prev:#b9b2a2;--danger:#b4452f;--ok:#2c7a4b;--right:#3f5f8f;--left:#a2493b}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Heebo","Segoe UI",system-ui,sans-serif;font-size:13px;line-height:1.4}
+.num{font-variant-numeric:tabular-nums}
+.toolbar{max-width:800px;margin:14px auto 0;padding:0 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.btn{height:34px;padding:0 14px;border:1px solid var(--line2);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-weight:600;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.page{background:var(--surface);max-width:800px;margin:12px auto 30px;padding:26px 30px 24px;border:1px solid var(--line);border-radius:8px}
+h1{margin:0;font-size:22px;font-weight:800}
+.sub{color:var(--ink2);font-size:13px;margin-top:3px}
+h2{font-size:14px;font-weight:700;margin:22px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi .l{font-size:12px;color:var(--ink2);font-weight:500}
+.kpi .v{font-size:22px;font-weight:800;line-height:1.1;margin-top:3px}
+.kpi .v small{font-size:12px;font-weight:500;color:var(--ink2)}
+.kpi.acc .v{color:var(--accent)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.chart{text-align:center}
+.chart .cap{font-size:12px;color:var(--ink2);margin-top:2px}
+svg{max-width:100%;height:auto;display:block;margin:0 auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{font-weight:600;color:var(--ink2);text-align:right;padding:5px 8px;border-bottom:1px solid var(--line);background:#fbfaf6;white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.n,th.n{text-align:left;direction:ltr}
+td.up{color:var(--ok);font-weight:600} td.down{color:var(--danger);font-weight:600}
+tr.now td{font-weight:700;background:var(--accent-soft)}
+.legend{display:flex;gap:16px;justify-content:center;font-size:12px;color:var(--ink2);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-inline-end:5px}
+.note{font-size:11.5px;color:var(--ink3);margin-top:18px;line-height:1.5}
+.empty{color:var(--ink2);padding:14px 0}
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  body{background:#fff}
+  .toolbar{display:none}
+  .page{margin:0;padding:0;border:0;border-radius:0;max-width:none}
+  h2{break-after:avoid} .row,.kpis,table{break-inside:avoid}
+}
+@media (max-width:620px){ .kpis{grid-template-columns:1fr 1fr} .row{grid-template-columns:1fr} .page{padding:18px 14px} }
+</style>
+</head>
+<body>
+<div class="toolbar"><a class="btn" href="index.html">← למחשבון</a><button class="btn primary" onclick="window.print()">שמור כ-PDF / הדפס</button></div>
+<div class="page" id="page"><p class="empty">טוען נתונים...</p></div>
+
+<script>
+'use strict';
+const PLACE={code:'3780', name:'ביתר עילית', eligible26:34945, k25:{eligible:29318, voters:23847, turnout:81.3, valid:23688, votes:{'ג':14081,'שס':7303,'ב':1844,'מחל':328}}};
+const PARTY_NAMES={'ג':'יהדות התורה','שס':'ש"ס','ב':'עוצמה יהודית','מחל':'הליכוד','ט':'הציונות הדתית','זך':'הציבור החרדי','נר':'צבע שחור','דרך':'ישר!','אמת':'הדמוקרטים','רק':'ביחד','ל':'ישראל ביתנו','ך':'עמך ישראל','די':'המילואימניקים','עם':'רע"ם','ודם':'המשותפת'};
+const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
+const K25_FINAL=70.63, FULL_ELIGIBLE=7331981;
+const $=id=>document.getElementById(id);
+const fmt=n=>(n==null||isNaN(n))?'—':Math.round(n).toLocaleString('he-IL');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hoursOf=x=>{ const m=/^(\d{1,2}):(\d{2})/.exec(x||''); return m? parseInt(m[1],10)+parseInt(m[2],10)/60 : NaN; };
+async function fetchJSON(u){ const r=await fetch(u+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+/* עוגה (דונאט) */
+function donut(parts, size=150, inner=0.58){ // parts: [{v,color,label}]
+  const total=parts.reduce((a,p)=>a+p.v,0)||1; const R=size/2, r=R*inner; let a0=-Math.PI/2, out='';
+  parts.forEach(p=>{ const a1=a0+(p.v/total)*2*Math.PI; const big=(a1-a0)>Math.PI?1:0;
+    const x0=R+R*Math.cos(a0), y0=R+R*Math.sin(a0), x1=R+R*Math.cos(a1), y1=R+R*Math.sin(a1);
+    const xi0=R+r*Math.cos(a0), yi0=R+r*Math.sin(a0), xi1=R+r*Math.cos(a1), yi1=R+r*Math.sin(a1);
+    if(p.v>0) out+=`<path d="M${x0},${y0} A${R},${R} 0 ${big} 1 ${x1},${y1} L${xi1},${yi1} A${r},${r} 0 ${big} 0 ${xi0},${yi0} Z" fill="${p.color}" stroke="#fff" stroke-width="2"/>`;
+    a0=a1; });
+  return {svg:out, total};
+}
+function donutChart(parts, centerBig, centerSmall, size=150){
+  const d=donut(parts,size);
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${d.svg}<text x="${size/2}" y="${size/2+2}" text-anchor="middle" font-size="24" font-weight="800" fill="#2a2722">${centerBig}</text><text x="${size/2}" y="${size/2+20}" text-anchor="middle" font-size="10" fill="#6e685e">${centerSmall}</text></svg>`;
+}
+/* עמודות מקובצות */
+function bars(groups, series, maxY=90){ // groups: labels; series: [{name,color,values[]}]
+  const W=720,H=230,L=36,R=10,T=14,B=28, n=groups.length, gw=(W-L-R)/n, bw=Math.min(22,(gw-10)/series.length);
+  const Y=v=>T+(1-v/maxY)*(H-T-B); let g='';
+  for(let v=0;v<=maxY;v+=30) g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e4e2d9"/><text x="${L-5}" y="${Y(v)+4}" font-size="10" fill="#9a9488" text-anchor="end">${v}%</text>`;
+  groups.forEach((lab,i)=>{ const cx=L+gw*i+gw/2; g+=`<text x="${cx}" y="${H-9}" font-size="11" fill="#6e685e" text-anchor="middle">${lab}</text>`;
+    series.forEach((s,j)=>{ const v=s.values[i]; if(v==null) return; const x=cx-(series.length*bw)/2+j*bw+1; g+=`<rect x="${x}" y="${Y(v)}" width="${bw-2}" height="${Y(0)-Y(v)}" fill="${s.color}" rx="2"/><text x="${x+(bw-2)/2}" y="${Y(v)-4}" font-size="10" font-weight="700" fill="${s.color==='#b9b2a2'?'#6e685e':s.color}" text-anchor="middle">${v}</text>`; }); });
+  return `<svg viewBox="0 0 ${W} ${H}" style="direction:ltr">${g}</svg>`;
+}
+
+async function main(){
+  const [a,b,c]=await Promise.allSettled([fetchJSON('live/turnout.json'), fetchJSON('live/turnout26.json'), fetchJSON('live/results.json')]);
+  const T= a.status==='fulfilled'? a.value : {}; const T26= b.status==='fulfilled'? b.value : null; const RES= c.status==='fulfilled'? c.value : null;
+  const k25=T.k25||{}; const pts=[[7,0]]; HOURS.forEach(s=>{ if(k25[s]!=null) pts.push([parseInt(s,10),k25[s]]); });
+  const nat25At=h=>{ if(!isFinite(h)||h<=7) return 0; if(h>=pts[pts.length-1][0]) return pts[pts.length-1][1]; for(let i=1;i<pts.length;i++){ const [h0,v0]=pts[i-1],[h1,v1]=pts[i]; if(h<=h1) return v0+(v1-v0)*(h-h0)/(h1-h0); } return 0; };
+  // ארצי 2026 לפי שעה
+  const nat26={}; Object.assign(nat26, T.k26||{}); (T26&&T26.reports||[]).forEach(r=>{ if(Number.isInteger(r.hour)&&r.national&&r.national.now>0) nat26[(r.hour<10?'0':'')+r.hour+':00']=Math.round(r.national.now*1000)/10; });
+  // ביתר לפי שעה
+  const rec=T.k26_places||{}; const rows=[]; HOURS.forEach(h=>{ const r=rec[h]&&rec[h][PLACE.code]; if(r) rows.push({h, pct:r[0], at:r[1]}); });
+  const p=RES && RES.status!=='no_data' && RES.places && RES.places[PLACE.code];
+  const elig=(p&&p.eligible)||PLACE.eligible26;
+  const last=rows[rows.length-1];
+  const now=new Date();
+  let h='';
+  h+=`<h1>${PLACE.name} – בחירות לכנסת ה-26</h1><div class="sub">27.10.2026 · נתוני אחוזי הצבעה לפי שעת הדיווח היישובי של ועדת הבחירות · הופק ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}</div>`;
+  // KPI
+  const curPct= p&&p.eligible? (p.voters/p.eligible*100) : (last? last.pct : null);
+  const curVoters= p&&p.eligible? p.voters : (last? Math.round(last.pct/100*elig) : null);
+  const curAt= p&&p.eligible? 'ספירה' : (last? `נכון ל-${last.at}` : '');
+  const ref= last? nat25At(hoursOf(last.at))/K25_FINAL*PLACE.k25.turnout : null;
+  h+=`<div class="kpis num">
+    <div class="kpi acc"><div class="l">אחוז הצבעה ${esc(curAt)}</div><div class="v">${curPct!=null?curPct.toFixed(1)+'%':'—'}</div></div>
+    <div class="kpi"><div class="l">מצביעים מתוך ${fmt(elig)} בז"ב</div><div class="v">${curVoters!=null?'≈'+fmt(curVoters):'—'}</div></div>
+    <div class="kpi"><div class="l">2022 באותה שעה (משוער)</div><div class="v">${ref!=null?'≈'+ref.toFixed(1)+'%':'—'} <small>${last&&ref!=null? ((last.pct-ref)>=0?'+':'')+(last.pct-ref).toFixed(1):''}</small></div></div>
+    <div class="kpi"><div class="l">2022 סוף היום</div><div class="v">${PLACE.k25.turnout}% <small>${fmt(PLACE.k25.voters)}</small></div></div>
+  </div>`;
+  // עוגות
+  if(last||p){
+    const pct=curPct||0;
+    h+=`<h2>מי כבר הצביע</h2><div class="row">
+      <div class="chart">${donutChart([{v:pct,color:'#136f73'},{v:100-pct,color:'#e4e2d9'}], pct.toFixed(1)+'%', '2026 · '+esc(curAt))}<div class="cap">הצביעו ≈${fmt(curVoters)} · טרם ≈${fmt(elig-(curVoters||0))}</div></div>
+      <div class="chart">${donutChart([{v:PLACE.k25.turnout,color:'#b9b2a2'},{v:100-PLACE.k25.turnout,color:'#e4e2d9'}], PLACE.k25.turnout+'%', '2022 · סוף היום')}<div class="cap">הצביעו ${fmt(PLACE.k25.voters)} · לא הצביעו ${fmt(PLACE.k25.eligible-PLACE.k25.voters)}</div></div>
+    </div>`;
+  }
+  // טבלה קבועה לפי שעה + עמודות
+  const refAt=hh=>{ const r=rows.find(x=>x.h===hh); return nat25At(r? hoursOf(r.at) : parseInt(hh,10))/K25_FINAL*PLACE.k25.turnout; };
+  const slots=HOURS.filter(hh=>hh!=='22:00');
+  const labels=slots.map(hh=>hh), s26=slots.map(hh=>{ const r=rows.find(x=>x.h===hh); return r? r.pct : null; }), s25=slots.map(hh=>Math.round(refAt(hh)*10)/10);
+  h+=`<h2>אחוז הצבעה לפי שעה: 2026 לעומת 2022</h2>${bars(labels,[{name:'ביתר 2026',color:'#136f73',values:s26},{name:'ביתר 2022',color:'#b9b2a2',values:s25}])}
+    <div class="legend"><span><i style="background:#136f73"></i>ביתר עילית 2026</span><span><i style="background:#b9b2a2"></i>ביתר עילית 2022 באותה שעה (משוער)</span></div>`;
+  const finalPct26= p&&p.eligible? p.voters/p.eligible*100 : null;
+  h+=`<table class="num" style="margin-top:12px"><tr><th>שעה</th><th class="n">ביתר 2026</th><th class="n">מצביעים</th><th class="n">ביתר 2022 באותה שעה</th><th class="n">הפער</th><th class="n">ארצי 2026</th></tr>`;
+  slots.forEach((hh,i)=>{ const r=rows.find(x=>x.h===hh); const d= r? r.pct-s25[i] : null;
+    h+=`<tr class="${r&&r===last?'now':''}"><td>${hh}${r?` <span style="color:#9a9488">(${esc(r.at)})</span>`:''}</td><td class="n">${r?`<b>${r.pct}%</b>`:'—'}</td><td class="n">${r?'≈'+fmt(r.pct/100*elig):'—'}</td><td class="n">≈${s25[i]}%</td><td class="n ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td><td class="n">${nat26[hh]!=null?nat26[hh]+'%':'—'}</td></tr>`; });
+  { const d= finalPct26!=null? finalPct26-PLACE.k25.turnout : null;
+    h+=`<tr><td><b>סוף יום</b></td><td class="n">${finalPct26!=null?`<b>${finalPct26.toFixed(1)}%</b>`:'—'}</td><td class="n">${finalPct26!=null?fmt(p.voters):'—'}</td><td class="n"><b>${PLACE.k25.turnout}%</b> <span style="color:#9a9488">(${fmt(PLACE.k25.voters)})</span></td><td class="n ${d==null?'':(d>=0?'up':'down')}">${d==null?'—':(d>=0?'+':'')+d.toFixed(1)}</td><td class="n">${RES&&RES.status==='final'&&RES.eligible? (RES.voters/RES.eligible*100).toFixed(1)+'%':'—'}</td></tr>`; }
+  h+=`</table>`;
+  // תוצאות
+  if(p && p.valid){
+    const top=Object.entries(p.votes||{}).sort((a,b)=>b[1]-a[1]);
+    const colors=['#136f73','#3f5f8f','#a2493b','#b5791a','#6e685e','#9a9488','#c9c1ad'];
+    const parts26=top.slice(0,5).map(([l,v],i)=>({v,color:colors[i],label:l})); const rest26=top.slice(5).reduce((a,[,v])=>a+v,0); if(rest26) parts26.push({v:rest26,color:colors[6],label:'אחר'});
+    const k25v=Object.entries(PLACE.k25.votes).sort((a,b)=>b[1]-a[1]); const parts25=k25v.map(([l,v],i)=>({v,color:colors[i],label:l})); const rest25=PLACE.k25.valid-k25v.reduce((a,[,v])=>a+v,0); parts25.push({v:rest25,color:colors[6],label:'אחר'});
+    h+=`<h2>תוצאות הספירה ב${PLACE.name}</h2><div class="sub num">הצביעו ${fmt(p.voters)} מתוך ${fmt(p.eligible)} (${(p.voters/p.eligible*100).toFixed(1)}%) · כשרים ${fmt(p.valid)} · פסולים ${fmt(p.invalid)}${RES.status==='final'?' · סופי':' · ספירה חלקית'}</div>
+      <div class="row" style="margin-top:10px">
+        <div class="chart">${donutChart(parts26, '2026', 'לפי רשימות')}<div class="legend">${parts26.map(x=>`<span><i style="background:${x.color}"></i>${esc(PARTY_NAMES[x.label]||x.label)} ${(x.v/p.valid*100).toFixed(1)}%</span>`).join('')}</div></div>
+        <div class="chart">${donutChart(parts25, '2022', 'לפי רשימות')}<div class="legend">${parts25.map(x=>`<span><i style="background:${x.color}"></i>${esc(PARTY_NAMES[x.label]||x.label)} ${(x.v/PLACE.k25.valid*100).toFixed(1)}%</span>`).join('')}</div></div>
+      </div>
+      <table class="num" style="margin-top:12px"><tr><th>רשימה</th><th class="n">קולות 2026</th><th class="n">%</th><th class="n">2022</th><th class="n">הפרש</th></tr>`;
+    top.slice(0,8).forEach(([l,v])=>{ const a=v/p.valid*100, b=(PLACE.k25.votes[l]!=null? PLACE.k25.votes[l]/PLACE.k25.valid*100 : null); h+=`<tr><td>${esc(PARTY_NAMES[l]||l)} <span style="color:#9a9488">${esc(l)}</span></td><td class="n">${fmt(v)}</td><td class="n">${a.toFixed(1)}%</td><td class="n">${b!=null?b.toFixed(1)+'%':'—'}</td><td class="n ${b!=null?(a>=b?'up':'down'):''}">${b!=null?((a-b>=0?'+':'')+(a-b).toFixed(1)):'—'}</td></tr>`; });
+    h+=`</table>`;
+  }
+  h+=`<div class="note">מקורות: ועדת הבחירות המרכזית (דיווחי אחוזי הצבעה לפי יישוב; קובץ תוצאות לפי יישובים). בז"ב 2026: ${fmt(PLACE.eligible26)} לפי אינדקס הקלפיות של votes26, עד פרסום קובץ התוצאות. נתוני 2022: ועדת הבחירות, תוצאות לפי יישובים (expc.csv). "2022 באותה שעה" משוער: אחוז ההצבעה הסופי של ביתר עילית ב-2022 כפול הקצב הארצי של 2022 באותה שעה (לביתר יש מ-2022 נתון סוף יום בלבד).</div>`;
+  $('page').innerHTML=h;
+}
+main().catch(e=>{ $('page').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; });
+</script>
+</body>
+</html>
