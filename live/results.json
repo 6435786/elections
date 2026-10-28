@@ -92,9 +92,9 @@
   "שס": 217200,
   "": 0
  },
- "kalpi": 9224,
- "kalpi_counted": 9224,
- "counted_pct": 100.0,
+ "kalpi": null,
+ "kalpi_counted": null,
+ "counted_pct": null,
  "votes_counted": 4008086,
  "generated": "2026-10-28T08:58:52+00:00",
  "places": {
