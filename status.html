@@ -159,7 +159,7 @@ function allocate(votesByLetter){
 }
 
 /* ---------- תחזית ---------- */
-function project(feed, k25, closeT){
+function project(feed, k25, closeT, rem){
   const parties=feed.parties, PI={}; parties.forEach((p,i)=>PI[p]=i);
   const country=feed.country, towns=feed.towns||{}, prog=(feed.progress&&feed.progress.towns)||{};
   const counted={}; parties.forEach((p,i)=>counted[p]=country[4][i]||0);
@@ -173,17 +173,21 @@ function project(feed, k25, closeT){
     r[p]= den>0? num/den : 1; });
   const turnoutRatio=(closeT/100)/(K25_CLOSE/100);
   const proj={}; parties.forEach(p=>proj[p]=counted[p]);
-  let remPartial=0, remZero=0, projVoters=countedVoters;
+  let remPartial=0, remZero=0, projVoters=countedVoters, boxVoters=0, boxTowns=0;
   const shareVec=(k)=>{ const v={}; let sum=0; parties.forEach(p=>{ const P=PARENTS[p]; let s; if(P && k){ const b=s22(k,P); s= b==null? natShare[p] : b*r[p]; } else s=natShare[p]; v[p]=Math.max(0,s); sum+=v[p]; }); if(sum>0) parties.forEach(p=>v[p]/=sum); return v; };
-  const codes=new Set([...Object.keys(prog),...Object.keys(k25)]); codes.delete('9999');
+  const rem_=rem;
+  const codes=new Set(feed.noTowns? [] : [...Object.keys(prog),...Object.keys(k25)]); codes.delete('9999');
   const townInfo={};
   codes.forEach(code=>{ const pg=prog[code]||[0,0,0], t=towns[code], k=k25[code];
     const a=pg[0], b=pg[1]; let e26=pg[2]||0; if(!e26 && k) e26=k[1]*FULL_ELIGIBLE/K25_ELIGIBLE;
     const V=t?t[1]:0, valid=t?t[3]:0;
     const tr22= k&&k[1]? k[2]/k[1] : K25_CLOSE/100; const X=e26*Math.min(0.97, tr22*turnoutRatio);
     let rem=0; if(b>0 && a>=b) rem=0; else if(a===0 || !V) rem=X; else rem=V*(b-a)/a;
-    const remValid= rem*(V? valid/V : 0.99);
-    if(rem>0){ const sv=shareVec(k); parties.forEach(p=>proj[p]+=remValid*sv[p]); if(a>0&&V) remPartial+=rem; else remZero+=rem; projVoters+=rem; }
+    let remValid= rem*(V? valid/V : 0.99), kk=k;
+    // רמת קלפי: אם יש לנו את רשימת הקלפיות החסרות ביישוב (ועדכנית לפחות כמו ההזנה) – משתמשים בפרופיל 2022 של הקלפיות האלה
+    const RM= rem>0 && rem_ && rem_.towns && rem_.towns[code];
+    if(RM && RM.bc>=a && RM.bt>RM.bc){ rem=RM.voters_est; remValid=RM.valid_est; const pv=Object.values(RM.profile||{}).reduce((x,y)=>x+y,0); if(pv>0) kk=['',0,0,pv,RM.profile]; boxVoters+=rem; boxTowns++; }
+    if(rem>0){ const sv=shareVec(kk); parties.forEach(p=>proj[p]+=remValid*sv[p]); if(a>0&&V) remPartial+=rem; else remZero+=rem; projVoters+=rem; }
     townInfo[code]={a,b,e26,V,valid,rem,name:(k&&k[0])||code,k,t};
   });
   // מעטפות כפולות: לפי 2022, מוגדל ביחס הקולות הצפויים
@@ -191,7 +195,7 @@ function project(feed, k25, closeT){
   if(dbl){ const expD=dbl[2]*(FULL_ELIGIBLE*closeT/100)/K25_VOTERS; const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
     const sv=shareVec(dbl); const dv=dblRem*(dbl[3]/dbl[2]); parties.forEach(p=>proj[p]+=dv*sv[p]); projVoters+=dblRem; }
   const projValid=Object.values(proj).reduce((a,b)=>a+b,0);
-  return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI};
+  return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI,boxVoters,boxTowns};
 }
 
 /* ---------- ציורים ---------- */
@@ -206,11 +210,17 @@ function hemicycle(seatList){ // seatList: [{color,solid}] אורך 120, מסו�
 
 /* ---------- דף ---------- */
 async function main(){
-  const [a,b,c,d]=await Promise.allSettled([fetchJSON(DAY_URL), fetchJSON('live/results.json'), fetchJSON('live/turnout.json'), fetchJSON('live/k25_towns.json')]);
-  const feed= a.status==='fulfilled'? a.value : null; const ours= b.status==='fulfilled'? b.value : null; const T= c.status==='fulfilled'? c.value : {}; const k25= d.status==='fulfilled'? d.value : null;
+  const [a,b,c,d,e]=await Promise.allSettled([fetchJSON(DAY_URL), fetchJSON('live/results.json'), fetchJSON('live/turnout.json'), fetchJSON('live/k25_towns.json'), fetchJSON('live/remaining.json')]);
+  const REM= e.status==='fulfilled' && e.value && e.value.towns? e.value : null;
+  let feed= a.status==='fulfilled'? a.value : null; const ours= b.status==='fulfilled'? b.value : null; const T= c.status==='fulfilled'? c.value : {}; const k25= d.status==='fulfilled'? d.value : null;
+  if(!(feed && Array.isArray(feed.country) && feed.country[1]>0) && ours && ours.status!=='no_data' && ours.voters>0){
+    // ההזנה הפתוחה לא זמינה: מציגים את הספירה מהקובץ שלנו, בלי תחזית לפי יישובים
+    const letters=ours.letters||Object.keys(ours.votes||{});
+    feed={parties:letters, country:[ours.eligible||0, ours.voters, ours.invalid||0, ours.valid, letters.map(l=>ours.votes[l]||0)], towns:{}, progress:{towns:{}, country:[ours.kalpi_counted||0, ours.kalpi||0, ours.eligible||0]}, external:[0,0,0,0], stage: ours.status==='final'?'final':'counting', updated_label: ours.asof_label||ours.updated_label, noTowns:true};
+  }
   if(!feed || !Array.isArray(feed.country) || feed.country[1]<=0 || !k25){ $('#app').innerHTML='<p class="empty">עדיין אין נתוני ספירה.</p>'; return; }
   const closeT=(T.k26&&T.k26['22:00'])||77.7;
-  const M=project(feed,k25,closeT);
+  const M=project(feed,k25,closeT,REM);
   const final= feed.stage==='final';
   const asof= (ours && ours.voters===feed.country[1] && ours.asof_label) || feed.updated_label || '';
   const now=new Date();
@@ -220,7 +230,7 @@ async function main(){
   const backed=id=> P.quota? (M.counted[byId(id).letter]||0)/P.quota : 0;
   const countedShare=M.countedVoters/M.projVoters;
   let h='';
-  h+=`<div class="top"><a href="index.html">← למחשבון</a><a href="beitar.html">דוח ביתר עילית</a></div>`;
+  h+=`<div class="top"><a href="index.html">← לתמונת המצב הארצית</a><a href="beitar.html">דוח ביתר עילית</a></div>`;
   h+=`<div class="kicker">בחירות לכנסת ה-26 · ${final?'תוצאות סופיות':'ספירה חלקית'} · נכון ל-<b>${esc(asof)}</b></div>`;
   h+=`<h1>תמונת המצב הצפויה</h1>`;
   h+=`<p class="lead">תוצאות האמת שפורסמו, ותחזית לסיום הספירה שנשענת ככל האפשר על תוצאות האמת עצמן.</p>`;
@@ -235,7 +245,7 @@ async function main(){
       <div class="tile"><div class="v">${fmtK(M.remPartial)}</div><div class="l">צפויים ביישובים שדווחו בחלקם · לפי האמת ביישוב<i class="hatch" style="background:#2b5fb399"></i></div></div>
       <div class="tile"><div class="v">${fmtK(M.remZero)}</div><div class="l">צפויים ביישובים שלא דווחו · 2022 + השינוי<i class="hatch" style="background:#2b5fb399"></i></div></div>
       <div class="tile"><div class="v">${fmtK(M.dblRem)}</div><div class="l">צפויים ממעטפות כפולות · 2022 + השינוי<i class="dots" style="background:#2b5fb399"></i></div></div>
-    </div></div>`;
+    </div>${feed.noTowns? `<div class="note">כרגע אין גישה לנתוני היישובים, ולכן התחזית כוללת רק את הקולות שנספרו ואומדן למעטפות הכפולות.</div>`:''}${M.boxVoters? `<div class="note">מתוכם כ-${fmtK(M.boxVoters)} קולות ב-${M.boxTowns} יישובים הוערכו <b>ברמת קלפי</b>: לפי הקלפיות הספציפיות שטרם נספרו ומה שהן הצביעו ב-2022 (${REM.boxes_matched} קלפיות תואמות, ${REM.boxes_unmatched} לפי ממוצע היישוב; נכון ל-${esc(REM.asof_label||'')}).</div>` : ''}</div>`;
 
   /* הכנסת הצפויה */
   const order=['likud','rzd','otzma','amcha','shas','utj','yashar','beyachad','dem','yb','milu','raam','joint'];
@@ -280,7 +290,7 @@ async function main(){
     <div class="note">מודד (קולות למנדט) עכשיו: ${fmt(C.measure)} · בתחזית: ${fmt(P.measure)} · כשרים שנספרו: ${fmt(M.countedValid)} · צפויים: ${fmt(M.projValid)}</div></div></details>`;
   h+=`<details><summary>איך מחושבת התחזית</summary><div class="body">
     <p>1. <b>יישובים שנספרו במלואם</b> – התוצאה כפי שהיא.</p>
-    <p>2. <b>יישובים שדווחו בחלקם</b> – הקלפיות שטרם נספרו מוערכות לפי היחס בין הקלפיות שנספרו לכלל הקלפיות ביישוב, והקולות מתחלקים לפי מה שהיישוב הצביע ב-2022, מתוקן לפי השינוי הארצי של כל רשימה (כמה היא מקבלת ביישובים שכבר נספרו לעומת מה שקיבלו שם ב-2022 הרשימות שמהן היא באה).</p>
+    <p>2. <b>יישובים שדווחו בחלקם</b> – כשיש לנו את קובץ הקלפיות של הוועדה, יודעים בדיוק אילו קלפיות חסרות: לכל אחת מחפשים את אותה קלפי ב-2022 (אותו יישוב ומספר, בז"ב דומה) ומשתמשים בתוצאה שלה; לקלפי חדשה או שהשתנתה – ממוצע היישוב. מספר המצביעים בקלפי חסרה = הבז"ב שלה כפול אחוז ההצבעה שנמדד בקלפיות היישוב שכבר נספרו. בלי הקובץ, הקלפיות החסרות מוערכות לפי היחס בין הקלפיות שנספרו לכלל הקלפיות ביישוב. בשני המקרים הקולות מתחלקים לפי 2022, מתוקן לפי השינוי הארצי של כל רשימה (כמה היא מקבלת ביישובים שכבר נספרו לעומת מה שקיבלו שם ב-2022 הרשימות שמהן היא באה).</p>
     <p>3. <b>יישובים שטרם דווחו</b> – מספר המצביעים הצפוי לפי בעלי זכות הבחירה ואחוז ההצבעה של היישוב ב-2022, מותאם לאחוז ההצבעה הארצי בסגירה (${closeT}% לעומת ${K25_CLOSE}% ב-2022); חלוקת הקולות כמו בסעיף 2.</p>
     <p>4. <b>מעטפות כפולות</b> (חיילים, דיפלומטים, מאושפזים, אסירים, מבודדים) – לפי מספרן ב-2022 (${fmt(k25['9999'][2])}) מוגדל ביחס לקולות הצפויים, והחלוקה לפי תוצאות המעטפות הכפולות ב-2022 עם השינוי הארצי.</p>
     <p>המנדטים מחושבים בשיטת בדר-עופר עם הסכמי העודפים (${PAIRS.map(p=>byId(p[0]).name+'–'+byId(p[1]).name).join(', ')}). "מגובים" = הקולות שכבר נספרו חלקי מחיר המנדט הצפוי.</p>

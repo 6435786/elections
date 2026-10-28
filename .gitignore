@@ -3,3 +3,6 @@ live/expb.csv
 scripts/__pycache__/
 live/live_local.log
 live/live_local.err
+live/expb25.csv
+live/stations26.json
+live/stations26.xlsx
