@@ -145,7 +145,7 @@ const HAREDI=['3780','6100','3797','2610','1309','922','1137','3660'];
 const MIXED=['3000','8000','3730','6700','7700','4000','70','7400','6600','7100','2630','9000'];
 const CITY_CARDS=['3780','6100','3797','1309','2610','3000'];
 const FULL_ELIGIBLE=7331981, K25_ELIGIBLE=6788804, K25_VOTERS=4794593, K25_CLOSE=70.6, THR=0.0325;
-const DBL_EST=455000, DBL_EST_LABEL='430–480 אלף'; // הערכת ועדת הבחירות המרכזית, 28.10.2026 (ב-2022 היו 462,807)
+let DBL_EST=455000, DBL_EST_LABEL='430–480 אלף'; // הערכת ועדת הבחירות המרכזית, 28.10.2026 (ב-2022 היו 462,807)
 const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json';
 const $=s=>document.querySelector(s);
 const fmt=n=>(n==null||isNaN(n))?'—':Math.round(n).toLocaleString('he-IL');
@@ -219,7 +219,7 @@ function project(feed, k25, closeT, rem){
   const extArr=(feed.external&&feed.external[1]>0)? feed.external : (towns['9999']&&towns['9999'][1]>0? towns['9999'] : null);
   const ext={voters: extArr? extArr[1]:0, valid: extArr? extArr[3]:0, votes:{}}; if(extArr && Array.isArray(extArr[4])) parties.forEach((p,i)=>{ if(extArr[4][i]>0) ext.votes[p]=extArr[4][i]; });
   const dbl=k25['9999']; let dblRem=0;
-  if(dbl){ const expD=DBL_EST; /* הערכת ועדת הבחירות, לא גזירה מ-2022 */ const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
+  if(dbl && feed.stage!=='final'){ const expD=DBL_EST; /* הערכת ועדת הבחירות, לא גזירה מ-2022 */ const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
     const sv=shareVec(dbl); const dv=dblRem*(dbl[3]/dbl[2]); parties.forEach(p=>proj[p]+=dv*sv[p]); projVoters+=dblRem; }
   const projValid=Object.values(proj).reduce((a,b)=>a+b,0);
   return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI,boxVoters,boxTowns,ext};
@@ -327,7 +327,8 @@ function saveSpec(){ try{ localStorage.setItem('k26.spec',JSON.stringify(SPEC));
 
 /* ---------- דף ---------- */
 async function main(){
-  const [a,b,c,d,e,f]=await Promise.allSettled([fetchJSON(DAY_URL), fetchJSON('live/results.json'), fetchJSON('live/turnout.json'), fetchJSON('live/k25_towns.json'), fetchJSON('live/remaining.json'), fetchJSON('live/turnout26.json')]);
+  const [a,b,c,d,e,f,g]=await Promise.allSettled([fetchJSON(DAY_URL), fetchJSON('live/results.json'), fetchJSON('live/turnout.json'), fetchJSON('live/k25_towns.json'), fetchJSON('live/remaining.json'), fetchJSON('live/turnout26.json'), fetchJSON('live/config.json')]);
+  if(g.status==='fulfilled' && g.value && g.value.dbl_est>0){ DBL_EST=g.value.dbl_est; if(g.value.dbl_label) DBL_EST_LABEL=g.value.dbl_label; }
   let feed= a.status==='fulfilled'? a.value : null; const ours= b.status==='fulfilled'? b.value : null; const T= c.status==='fulfilled'? c.value : {}; const k25= d.status==='fulfilled'? d.value : null;
   const REM= e.status==='fulfilled' && e.value && e.value.towns? e.value : null; const T26= f.status==='fulfilled'? f.value : null;
   if(!(feed && Array.isArray(feed.country) && feed.country[1]>0) && ours && ours.status!=='no_data' && ours.voters>0){
