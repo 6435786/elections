@@ -30,6 +30,10 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Heebo","Se
 .srcs{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.5px;color:var(--ink2)}
 .srcs b{color:var(--ink);font-weight:700}
 .srcs i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-inline-start:5px;vertical-align:-1px}
+.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:0 0 6px}
+.kp div{border:1px solid var(--line);border-radius:var(--r);background:var(--card);padding:9px 10px;text-align:center}
+.kp .v{font-size:21px;font-weight:800;line-height:1.1}
+.kp .l{font-size:11.5px;color:var(--ink2);margin-top:2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin:14px 0}
 .card h2{font-family:"Petek","Heebo",serif;font-weight:900;font-size:24px;margin:0 0 2px;line-height:1.1}
 .card .sub{font-size:13.5px;color:var(--ink2);margin:0 0 12px}
@@ -354,6 +358,8 @@ async function main(){
       <div class="prog">${[[M.countedVoters,''],[M.remPartial,'hatch'],[M.remZero,'hatch'],[M.dblRem,'hatch']].map(([v,k])=>`<span class="${k}" style="width:${(v/M.projVoters*100).toFixed(2)}%;background:${k?'#8fb8b6':'var(--acc)'}"></span>`).join('')}</div>
       <div class="srcs num"><span><i style="background:var(--acc)"></i>נספרו <b>${fmtK(M.countedVoters)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>יישובים חלקיים <b>${fmtK(M.remPartial)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>לא דווחו <b>${fmtK(M.remZero)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>מעטפות כפולות <b>${fmtK(M.dblRem)}</b> <span style="color:var(--ink3)">(הערכת הוועדה: ${DBL_EST_LABEL})</span></span></div></div>
       <div class="big num"><div class="v">${pc(countedShare)}</div><div class="l">מהקולות הצפויים כבר נספרו</div></div></div>`;
+  { const pc_=feed.progress&&feed.progress.country; const kc= pc_? pc_[0] : (ours&&ours.kalpi_counted), kt= pc_? pc_[1] : (ours&&ours.kalpi);
+    h+=`<div class="kp num"><div><div class="v">${fmt(feed.country[0]||FULL_ELIGIBLE)}</div><div class="l">בעלי זכות בחירה</div></div><div><div class="v">${fmt(M.countedVoters)}</div><div class="l">קולות עד עתה</div></div><div><div class="v">${kc?fmt(kc):'—'}</div><div class="l">קלפיות עד עתה${kt?` מתוך ${fmt(kt)}`:''}</div></div><div><div class="v">${fmt(M.countedValid)}</div><div class="l">קולות כשרים</div></div><div><div class="v">${fmt(feed.country[2])}</div><div class="l">קולות פסולים</div></div></div>`; }
   if(M.ext && M.ext.voters>0){ const d22=k25['9999']; const sh=(l)=> M.ext.valid? (M.ext.votes[l]||0)/M.ext.valid : null; const sh22=(l)=> d22&&d22[3]? (d22[4][l]||0)/d22[3] : null;
     h+=`<div class="note num" style="margin:-4px 0 10px"><b>מעטפות כפולות שנספרו: ${fmt(M.ext.voters)}</b> מתוך ≈${fmt(DBL_EST)} · ${['ג','שס','מחל','ט','ב','דרך'].map(l=>`${esc(nameOfLetter(l))} <b>${pc(sh(l))}</b> <span style="color:var(--ink3)">(2022: ${pc(sh22(l))})</span>`).join(' · ')}</div>`; }
   if(feed.noTowns) h+=`<div class="note">כרגע אין גישה לנתוני היישובים, ולכן התחזית כוללת רק את הקולות שנספרו ואומדן למעטפות הכפולות.</div>`;
