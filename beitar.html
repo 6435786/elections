@@ -46,7 +46,10 @@ tr.tot td{font-weight:700;border-top:2px solid var(--line2);background:#fbfaf6}
   .page{margin:0;padding:0;border:0;border-radius:0;max-width:none}
   h2,h3{break-after:avoid} .kpis,table,svg{break-inside:avoid}
 }
-@media (max-width:620px){ .kpis{grid-template-columns:1fr 1fr} .page{padding:18px 14px} td,th{padding:4px 5px} }
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:10px}
+.tw table{margin-top:0}
+.kalpi{font-size:12px;color:var(--ink2);margin-top:8px}
+@media (max-width:620px){ .kpis{grid-template-columns:1fr 1fr} .page{padding:16px 10px} h1{font-size:19px} table{font-size:11.5px} td,th{padding:4px 5px} .kpi .v{font-size:19px} }
 </style>
 </head>
 <body>
@@ -91,19 +94,26 @@ const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json'; // �
 function resultsFromFeed(day, codes){
   if(!day || !Array.isArray(day.country) || !Array.isArray(day.parties) || day.country[1]<=0) return null;
   const unpack=(arr,name)=>{ const [eligible,voters,invalid,valid,vv]=arr; const votes={}; (vv||[]).forEach((n,i)=>{ if(n>0) votes[day.parties[i]]=n; }); return {name, eligible, voters, invalid, valid, votes}; };
+  const pr=day.progress||{}; const prT=pr.towns||{}; const prC=Array.isArray(pr.country)? pr.country : null;
   const c=unpack(day.country,'ארצי'); const towns=day.towns||{}; const places={};
-  Object.entries(codes).forEach(([code,name])=>{ if(towns[code]) places[code]=unpack(towns[code],name); });
+  Object.entries(codes).forEach(([code,name])=>{ if(towns[code]){ places[code]=unpack(towns[code],name); const q=prT[code]; if(Array.isArray(q)){ places[code].kalpi_counted=q[0]; places[code].kalpi=q[1]; } } });
   const label= day.updated_label || ((day.updated||'').slice(11,16));
   return {updated:day.updated, updated_label:label, asof:day.updated, asof_label:label, source:'feed', status: day.stage==='final'? 'final' : 'partial',
     localities:Object.keys(towns).length, eligible:c.eligible, voters:c.voters, invalid:c.invalid, valid:c.valid, letters:day.parties.slice(), votes:c.votes, places,
-    counted_pct: typeof day.counted_pct==='number'? day.counted_pct : null};
+    kalpi_counted: prC? prC[0] : null, kalpi: prC? prC[1] : null,
+    counted_pct: typeof day.counted_pct==='number'? day.counted_pct : (prC&&prC[1]? Math.round(prC[0]/prC[1]*1000)/10 : null)};
 }
-/* בוחרים את המקור המתקדם יותר (יותר מצביעים נספרו); בשוויון – הקובץ שלנו, שזמן "נכון ל-" שלו מדויק יותר */
+/* בוחרים את המקור המתקדם יותר (יותר מצביעים נספרו); בשוויון – הקובץ שלנו (זמן "נכון ל-" מדויק יותר) בתוספת נתוני הקלפיות מההזנה */
 function pickResults(ours, fromFeed){
   const ok=x=>x && x.status!=='no_data' && x.voters>0;
   if(!ok(fromFeed)) return ok(ours)? ours : (ours||fromFeed||null);
   if(!ok(ours)) return fromFeed;
-  return fromFeed.voters>ours.voters? fromFeed : ours;
+  if(fromFeed.voters>ours.voters) return fromFeed;
+  if(fromFeed.voters===ours.voters){ // אותה ספירה: משלימים כמה קלפיות נספרו
+    ['kalpi','kalpi_counted','counted_pct'].forEach(k=>{ if(ours[k]==null && fromFeed[k]!=null) ours[k]=fromFeed[k]; });
+    Object.entries(fromFeed.places||{}).forEach(([code,fp])=>{ const op=ours.places&&ours.places[code]; if(op&&op.voters===fp.voters){ op.kalpi=fp.kalpi; op.kalpi_counted=fp.kalpi_counted; } });
+  }
+  return ours;
 }
 async function main(){
   const [a,b,c,d]=await Promise.allSettled([fetchJSON('live/turnout.json'), fetchJSON('live/turnout26.json'), fetchJSON('live/results.json'), fetchJSON(DAY_URL)]);
@@ -129,6 +139,7 @@ async function main(){
   const state= hasRes? (RES.status==='final'? 'תוצאות סופיות' : 'ספירה חלקית') : 'טרם פורסמו תוצאות';
   h+=`<h1>${PLACE.name} – בחירות לכנסת ה-26</h1><div class="sub">27.10.2026 · ${esc(state)}${asof? `, <b>נכון ל-${esc(asof)}</b>`:''} · הדף מתעדכן לבד · הופק ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}</div>`;
   const f26=final26(PLACE.code);
+  if(hasRes && RES.kalpi){ h+=`<div class="kalpi num">נספרו <b>${fmt(RES.kalpi_counted)}</b> מתוך ${fmt(RES.kalpi)} קלפיות בארץ (${pc(RES.kalpi_counted/RES.kalpi*100)})${p&&p.kalpi? ` · בביתר עילית <b>${fmt(p.kalpi_counted)}</b> מתוך ${fmt(p.kalpi)} קלפיות (${pc(p.kalpi_counted/p.kalpi*100)})` : ''}</div>`; }
   h+=`<div class="kpis num">
     <div class="kpi acc"><div class="l">אחוז הצבעה 2026</div><div class="v">${pc(f26)}</div></div>
     <div class="kpi"><div class="l">מצביעים מתוך ${fmt(p&&p.eligible||PLACE.eligible26)} בז"ב</div><div class="v">${p?fmt(p.voters):'—'}</div></div>
@@ -160,15 +171,16 @@ async function main(){
   h+=`<h2>3. תוצאות לפי רשימות <span>ביתר עילית · ${esc(state)}${asof?`, נכון ל-${esc(asof)}`:''}</span></h2>`;
   if(p && p.valid){
     const v25=P25[PLACE.code];
-    const share25=letter=>{ const m=MAP22[letter]; if(!m) return null; const s=m.reduce((a,l)=>a+(v25.votes[l]||0),0); return s/v25.valid*100; };
+    const votes25=letter=>{ const m=MAP22[letter]; if(!m) return null; return m.reduce((a,l)=>a+(v25.votes[l]||0),0); };
+    const share25=letter=>{ const n=votes25(letter); return n==null? null : n/v25.valid*100; };
     const top=Object.entries(p.votes||{}).sort((a,b)=>b[1]-a[1]).filter(([,v])=>v/p.valid>=0.002);
     h+=`<div class="sub num" style="margin-bottom:8px">הצביעו ${fmt(p.voters)} · כשרים ${fmt(p.valid)} · פסולים ${fmt(p.invalid)}</div>`;
-    h+=`<table class="num"><tr><th>רשימה</th><th>אות</th><th class="n">קולות</th><th class="n">% מהכשרים</th><th class="n">2022</th><th class="n">שינוי</th></tr>`;
-    top.forEach(([l,v])=>{ const a=v/p.valid*100, b=share25(l), d= b!=null? a-b : null;
-      h+=`<tr><td>${esc(PARTY_NAMES[l]||'')}</td><td style="color:#6e685e">${esc(l)}</td><td class="n">${fmt(v)}</td><td class="n"><b>${pc(a)}</b></td><td class="n">${b!=null?pc(b):'—'}</td><td class="n ${cls(d)}">${sgn(d)}</td></tr>`; });
+    h+=`<table class="num"><tr><th>רשימה</th><th>אות</th><th class="n">קולות 2026</th><th class="n">% מהכשרים</th><th class="n">קולות 2022</th><th class="n">% 2022</th><th class="n">שינוי</th></tr>`;
+    top.forEach(([l,v])=>{ const a=v/p.valid*100, n25=votes25(l), b=share25(l), d= b!=null? a-b : null;
+      h+=`<tr><td>${esc(PARTY_NAMES[l]||'')}</td><td style="color:#6e685e">${esc(l)}</td><td class="n">${fmt(v)}</td><td class="n"><b>${pc(a)}</b></td><td class="n">${n25!=null?fmt(n25):'—'}</td><td class="n">${b!=null?pc(b):'—'}</td><td class="n ${cls(d)}">${sgn(d)}</td></tr>`; });
     const shown=top.reduce((s,[,v])=>s+v,0);
-    if(p.valid-shown>0) h+=`<tr><td>שאר הרשימות</td><td></td><td class="n">${fmt(p.valid-shown)}</td><td class="n">${pc((p.valid-shown)/p.valid*100)}</td><td class="n"></td><td class="n"></td></tr>`;
-    h+=`<tr class="tot"><td>סה"כ כשרים</td><td></td><td class="n">${fmt(p.valid)}</td><td class="n">100%</td><td class="n">${fmt(v25.valid)}</td><td class="n"></td></tr></table>`;
+    if(p.valid-shown>0) h+=`<tr><td>שאר הרשימות</td><td></td><td class="n">${fmt(p.valid-shown)}</td><td class="n">${pc((p.valid-shown)/p.valid*100)}</td><td class="n"></td><td class="n"></td><td class="n"></td></tr>`;
+    h+=`<tr class="tot"><td>סה"כ כשרים</td><td></td><td class="n">${fmt(p.valid)}</td><td class="n">100%</td><td class="n">${fmt(v25.valid)}</td><td class="n">100%</td><td class="n"></td></tr></table>`;
     h+=`<div class="note">עמודת 2022: אחוז מהכשרים בביתר עילית בבחירות לכנסת ה-25. הציונות הדתית (ט) ב-2022 כללה את עוצמה יהודית ונעם, ולכן לעוצמה יהודית (ב) אין השוואה. הדמוקרטים מול העבודה+מרצ; הרשימה המשותפת מול חד"ש-תע"ל+בל"ד. רשימות מתחת ל-0.2% מרוכזות ב"שאר הרשימות".</div>`;
 
     // ערים חרדיות: אחוז מהכשרים לכל רשימה
@@ -179,11 +191,18 @@ async function main(){
     order.forEach(l=>{ h+=`<tr><td>${esc(PARTY_NAMES[l]||'')} <span style="color:#9a9488">${esc(l)}</span></td>${CITIES.map(c=>{ const x=places[c.code]; const v=x&&x.valid? (x.votes[l]||0)/x.valid*100 : null; return `<td class="n ${c.code===PLACE.code?'me':''}">${v==null?'—':(v<0.05?'·':pc(v))}</td>`; }).join('')}</tr>`; });
     h+=`<tr class="tot"><td>כשרים</td>${CITIES.map(c=>`<td class="n ${c.code===PLACE.code?'me':''}">${places[c.code]?fmt(places[c.code].valid):'—'}</td>`).join('')}</tr></table>`;
     h+=`<div class="note">רשימות שקיבלו לפחות 1% באחת הערים. נקודה = פחות מ-0.05%.</div>`;
+    h+=`<h3>השוואה לערים חרדיות – קולות</h3>`;
+    h+=`<table class="num"><tr><th>רשימה</th>${CITIES.map(c=>`<th class="n ${c.code===PLACE.code?'me':''}">${esc(c.name)}</th>`).join('')}</tr>`;
+    order.forEach(l=>{ h+=`<tr><td>${esc(PARTY_NAMES[l]||'')} <span style="color:#9a9488">${esc(l)}</span></td>${CITIES.map(c=>{ const x=places[c.code]; return `<td class="n ${c.code===PLACE.code?'me':''}">${x? fmt(x.votes[l]||0) : '—'}</td>`; }).join('')}</tr>`; });
+    h+=`<tr class="tot"><td>כשרים</td>${CITIES.map(c=>`<td class="n ${c.code===PLACE.code?'me':''}">${places[c.code]?fmt(places[c.code].valid):'—'}</td>`).join('')}</tr>`;
+    h+=`<tr class="tot"><td>מצביעים / בז"ב</td>${CITIES.map(c=>{ const x=places[c.code]; return `<td class="n ${c.code===PLACE.code?'me':''}">${x? fmt(x.voters)+' / '+fmt(x.eligible) : '—'}</td>`; }).join('')}</tr>`;
+    h+=`<tr><td>קלפיות שנספרו</td>${CITIES.map(c=>{ const x=places[c.code]; return `<td class="n ${c.code===PLACE.code?'me':''}">${x&&x.kalpi? fmt(x.kalpi_counted)+' / '+fmt(x.kalpi) : '—'}</td>`; }).join('')}</tr></table>`;
   } else {
     h+=`<p class="empty">קובץ התוצאות של ועדת הבחירות עדיין לא כולל את ביתר עילית.</p>`;
   }
 
   h+=`<div class="note" style="margin-top:18px">מקורות: ועדת הבחירות המרכזית – דיווחי אחוזי הצבעה לפי קלפי ולפי יישוב, קובץ התוצאות לפי יישובים (expc.csv) של הכנסת ה-26 ושל הכנסת ה-25. נתוני 2026 הם לפי הספירה שפורסמה עד שעת ההפקה.</div>`;
+  h=h.replace(/<table/g,'<div class="tw"><table').replace(/<\/table>/g,'</table></div>');
   $('page').innerHTML=h;
 }
 function run(){ main().catch(e=>{ $('page').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; }); }

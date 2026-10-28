@@ -829,7 +829,7 @@ function renderPlace(sel,last){
   if(p && p.valid){
     const byLetter={}; S.lists.forEach(l=>{ if(l.letter) byLetter[l.letter.trim()]=l; });
     const top=Object.entries(p.votes||{}).sort((a,b)=>b[1]-a[1]).slice(0,6);
-    h+=`<div style="margin-top:8px"><span class="ttl">${PLACE.name}, ספירה:</span> הצביעו <b>${fmt(p.voters)}</b> מתוך ${fmt(p.eligible)} (${p.eligible?pct1(p.voters/p.eligible):'—'}) · כשרים ${fmt(p.valid)}</div>`;
+    h+=`<div style="margin-top:8px"><span class="ttl">${PLACE.name}, ספירה:</span> הצביעו <b>${fmt(p.voters)}</b> מתוך ${fmt(p.eligible)} (${p.eligible?pct1(p.voters/p.eligible):'—'}) · כשרים ${fmt(p.valid)}${p.kalpi? ` · נספרו ${fmt(p.kalpi_counted)} מתוך ${fmt(p.kalpi)} קלפיות` : ''}</div>`;
     h+=`<table><tr><th>רשימה</th><th class="n">קולות</th><th class="n">%</th><th class="n">2022</th></tr>`;
     top.forEach(([letter,n])=>{ const l=byLetter[letter]; const nm=l? (SHORT[l.id]||l.name) : letter; const p25=PLACE.k25.votes[letter]; h+=`<tr><td>${esc(nm)} <small>${esc(letter)}</small></td><td class="n num">${fmt(n)}</td><td class="n num">${pct1(n/p.valid)}</td><td class="n num">${p25!=null? pct1(p25/PLACE.k25.valid):'—'}</td></tr>`; });
     h+=`</table>`;
@@ -844,19 +844,26 @@ const slotOf=label=>{ const m=/^(\d{1,2}):/.exec(label||''); if(!m) return null;
 function resultsFromFeed(day, codes){
   if(!day || !Array.isArray(day.country) || !Array.isArray(day.parties) || day.country[1]<=0) return null;
   const unpack=(arr,name)=>{ const [eligible,voters,invalid,valid,vv]=arr; const votes={}; (vv||[]).forEach((n,i)=>{ if(n>0) votes[day.parties[i]]=n; }); return {name, eligible, voters, invalid, valid, votes}; };
+  const pr=day.progress||{}; const prT=pr.towns||{}; const prC=Array.isArray(pr.country)? pr.country : null;
   const c=unpack(day.country,'ארצי'); const towns=day.towns||{}; const places={};
-  Object.entries(codes).forEach(([code,name])=>{ if(towns[code]) places[code]=unpack(towns[code],name); });
+  Object.entries(codes).forEach(([code,name])=>{ if(towns[code]){ places[code]=unpack(towns[code],name); const q=prT[code]; if(Array.isArray(q)){ places[code].kalpi_counted=q[0]; places[code].kalpi=q[1]; } } });
   const label= day.updated_label || ((day.updated||'').slice(11,16));
   return {updated:day.updated, updated_label:label, asof:day.updated, asof_label:label, source:'feed', status: day.stage==='final'? 'final' : 'partial',
     localities:Object.keys(towns).length, eligible:c.eligible, voters:c.voters, invalid:c.invalid, valid:c.valid, letters:day.parties.slice(), votes:c.votes, places,
-    counted_pct: typeof day.counted_pct==='number'? day.counted_pct : null};
+    kalpi_counted: prC? prC[0] : null, kalpi: prC? prC[1] : null,
+    counted_pct: typeof day.counted_pct==='number'? day.counted_pct : (prC&&prC[1]? Math.round(prC[0]/prC[1]*1000)/10 : null)};
 }
-/* בוחרים את המקור המתקדם יותר (יותר מצביעים נספרו); בשוויון – הקובץ שלנו, שזמן "נכון ל-" שלו מדויק יותר */
+/* בוחרים את המקור המתקדם יותר (יותר מצביעים נספרו); בשוויון – הקובץ שלנו (זמן "נכון ל-" מדויק יותר) בתוספת נתוני הקלפיות מההזנה */
 function pickResults(ours, fromFeed){
   const ok=x=>x && x.status!=='no_data' && x.voters>0;
   if(!ok(fromFeed)) return ok(ours)? ours : (ours||fromFeed||null);
   if(!ok(ours)) return fromFeed;
-  return fromFeed.voters>ours.voters? fromFeed : ours;
+  if(fromFeed.voters>ours.voters) return fromFeed;
+  if(fromFeed.voters===ours.voters){ // אותה ספירה: משלימים כמה קלפיות נספרו
+    ['kalpi','kalpi_counted','counted_pct'].forEach(k=>{ if(ours[k]==null && fromFeed[k]!=null) ours[k]=fromFeed[k]; });
+    Object.entries(fromFeed.places||{}).forEach(([code,fp])=>{ const op=ours.places&&ours.places[code]; if(op&&op.voters===fp.voters){ op.kalpi=fp.kalpi; op.kalpi_counted=fp.kalpi_counted; } });
+  }
+  return ours;
 }
 async function refreshLive(){
   const [a,b,c,d,e]=await Promise.allSettled([fetchJSON(LIVE_URL), fetchJSON(TURNOUT_URL), fetchJSON(DAY_URL), live.sectors? Promise.resolve(live.sectors) : fetchJSON(SECTORS_URL), fetchJSON(T26_URL)]);
