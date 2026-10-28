@@ -16,10 +16,15 @@ PLACES = {  # יישובים שמוצגים בנפרד בלוח החי ובדו�
 IL = timezone(timedelta(hours=2))  # שעון חורף בישראל (27.10.2026)
 
 
+LAST_HEADERS = {}
+
+
 def download(url, verbose=False):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
     with urllib.request.urlopen(req, timeout=60) as r:
         body = r.read()
+        LAST_HEADERS.clear()
+        LAST_HEADERS.update({k.lower(): v for k, v in r.headers.items()})
         if verbose:
             print("GET %s -> %s %s, %d bytes, final url %s" % (url, r.status, r.headers.get("Content-Type"), len(body), r.geturl()))
             print("headers:", dict(r.headers))
@@ -102,7 +107,8 @@ def govmap_summary():
     if not e:
         raise SystemExit("govmap: no current election in manifest")
     url = "https://elections.govmap.gov.il/data/votes/%s/municipal_data.json" % e.get("path", "latest")
-    raw = download(url, verbose=True)
+    raw = download(url)
+    src_mod = LAST_HEADERS.get("x-amz-meta-source-lastmodified") or ""
     if not raw.lstrip().startswith(b"{"):
         raise SystemExit("govmap: data file not published yet (%d bytes, not JSON)" % len(raw))
     g = json.loads(raw.decode("utf-8"))
@@ -129,11 +135,18 @@ def govmap_summary():
     t = g.get("totals") or {}
     kal, kc = to_int(str(t.get("kalpi", 0))), to_int(str(t.get("kalpi_counted", 0)))
     now = datetime.now(IL)
+    asof = None
+    try:  # זמן הקובץ המקורי של הוועדה (UTC) → שעון ישראל
+        asof = datetime.fromisoformat(src_mod.replace("Z", "+00:00")).astimezone(IL) if src_mod else None
+    except ValueError:
+        asof = None
     return {
         "updated": now.isoformat(timespec="seconds"),
         "updated_label": now.strftime("%H:%M"),
+        "asof": asof.isoformat(timespec="seconds") if asof else None,
+        "asof_label": (asof.strftime("%H:%M") if asof.date() == now.date() else asof.strftime("%d.%m %H:%M")) if asof else None,
         "source": url,
-        "status": "final" if (kal and kc >= kal) else "partial",
+        "status": "partial",  # ב-GovMap kalpi = הקלפיות שדווחו, לכן אי אפשר לדעת משם אם הספירה הסתיימה
         "localities": localities,
         "eligible": totals["בזב"],
         "voters": totals["מצביעים"],
@@ -141,9 +154,9 @@ def govmap_summary():
         "valid": totals["כשרים"],
         "letters": parties,
         "votes": votes,
-        "kalpi": kal or None,
-        "kalpi_counted": kc or None,
-        "counted_pct": (round(kc / kal * 100, 1) if kal else None),
+        "kalpi": None,  # ב-GovMap "kalpi" = הקלפיות שדווחו בלבד, אין סך כל – נשאר ריק כדי לא להציג 100%
+        "kalpi_counted": None,
+        "counted_pct": None,
         "votes_counted": t.get("votes_counted"),
         "generated": g.get("generated"),
         "places": places,
@@ -402,8 +415,8 @@ def main():
         print("CEC file not usable:", e)
     except Exception as e:
         print("CEC download failed:", repr(e))
-    if data is None and not a.file:
-        try:  # מקור שני: GovMap
+    if data is None:
+        try:  # מקור שני: GovMap (אותם נתוני הוועדה; עובד גם כשאתר הוועדה חוסם)
             data = govmap_summary()
             print("using GovMap: %d localities, %s%% of ballot boxes counted" % (data["localities"], data.get("counted_pct")))
         except SystemExit as e:
