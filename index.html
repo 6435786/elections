@@ -216,11 +216,13 @@ function project(feed, k25, closeT, rem){
     townInfo[code]={a,b,e26,V,valid,rem,name:(k&&k[0])||code,k,t};
   });
   // מעטפות כפולות: לפי 2022, מוגדל ביחס הקולות הצפויים
+  const extArr=(feed.external&&feed.external[1]>0)? feed.external : (towns['9999']&&towns['9999'][1]>0? towns['9999'] : null);
+  const ext={voters: extArr? extArr[1]:0, valid: extArr? extArr[3]:0, votes:{}}; if(extArr && Array.isArray(extArr[4])) parties.forEach((p,i)=>{ if(extArr[4][i]>0) ext.votes[p]=extArr[4][i]; });
   const dbl=k25['9999']; let dblRem=0;
   if(dbl){ const expD=DBL_EST; /* הערכת ועדת הבחירות, לא גזירה מ-2022 */ const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
     const sv=shareVec(dbl); const dv=dblRem*(dbl[3]/dbl[2]); parties.forEach(p=>proj[p]+=dv*sv[p]); projVoters+=dblRem; }
   const projValid=Object.values(proj).reduce((a,b)=>a+b,0);
-  return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI,boxVoters,boxTowns};
+  return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI,boxVoters,boxTowns,ext};
 }
 
 
@@ -351,6 +353,8 @@ async function main(){
       <div class="prog">${[[M.countedVoters,''],[M.remPartial,'hatch'],[M.remZero,'hatch'],[M.dblRem,'hatch']].map(([v,k])=>`<span class="${k}" style="width:${(v/M.projVoters*100).toFixed(2)}%;background:${k?'#8fb8b6':'var(--acc)'}"></span>`).join('')}</div>
       <div class="srcs num"><span><i style="background:var(--acc)"></i>נספרו <b>${fmtK(M.countedVoters)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>יישובים חלקיים <b>${fmtK(M.remPartial)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>לא דווחו <b>${fmtK(M.remZero)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>מעטפות כפולות <b>${fmtK(M.dblRem)}</b> <span style="color:var(--ink3)">(הערכת הוועדה: ${DBL_EST_LABEL})</span></span></div></div>
       <div class="big num"><div class="v">${pc(countedShare)}</div><div class="l">מהקולות הצפויים כבר נספרו</div></div></div>`;
+  if(M.ext && M.ext.voters>0){ const d22=k25['9999']; const sh=(l)=> M.ext.valid? (M.ext.votes[l]||0)/M.ext.valid : null; const sh22=(l)=> d22&&d22[3]? (d22[4][l]||0)/d22[3] : null;
+    h+=`<div class="note num" style="margin:-4px 0 10px"><b>מעטפות כפולות שנספרו: ${fmt(M.ext.voters)}</b> מתוך ≈${fmt(DBL_EST)} · ${['ג','שס','מחל','ט','ב','דרך'].map(l=>`${esc(nameOfLetter(l))} <b>${pc(sh(l))}</b> <span style="color:var(--ink3)">(2022: ${pc(sh22(l))})</span>`).join(' · ')}</div>`; }
   if(feed.noTowns) h+=`<div class="note">כרגע אין גישה לנתוני היישובים, ולכן התחזית כוללת רק את הקולות שנספרו ואומדן למעטפות הכפולות.</div>`;
 
   /* הכנסת + גושים */
