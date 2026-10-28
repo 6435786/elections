@@ -839,9 +839,28 @@ function renderPlace(sel,last){
 const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
 async function fetchJSON(u){ const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); return r.json(); }
 const slotOf=label=>{ const m=/^(\d{1,2}):/.exec(label||''); if(!m) return null; let h=parseInt(m[1],10); h-=h%2; return (h<10?'0':'')+h+':00'; };
+
+/* תוצאות ישירות מההזנה הפתוחה (CORS) – אותם מספרים של ועדת הבחירות; עובד גם כשהמחשב שמריץ את הלולאה כבוי */
+function resultsFromFeed(day, codes){
+  if(!day || !Array.isArray(day.country) || !Array.isArray(day.parties) || day.country[1]<=0) return null;
+  const unpack=(arr,name)=>{ const [eligible,voters,invalid,valid,vv]=arr; const votes={}; (vv||[]).forEach((n,i)=>{ if(n>0) votes[day.parties[i]]=n; }); return {name, eligible, voters, invalid, valid, votes}; };
+  const c=unpack(day.country,'ארצי'); const towns=day.towns||{}; const places={};
+  Object.entries(codes).forEach(([code,name])=>{ if(towns[code]) places[code]=unpack(towns[code],name); });
+  const label= day.updated_label || ((day.updated||'').slice(11,16));
+  return {updated:day.updated, updated_label:label, asof:day.updated, asof_label:label, source:'feed', status: day.stage==='final'? 'final' : 'partial',
+    localities:Object.keys(towns).length, eligible:c.eligible, voters:c.voters, invalid:c.invalid, valid:c.valid, letters:day.parties.slice(), votes:c.votes, places,
+    counted_pct: typeof day.counted_pct==='number'? day.counted_pct : null};
+}
+/* בוחרים את המקור המתקדם יותר (יותר מצביעים נספרו); בשוויון – הקובץ שלנו, שזמן "נכון ל-" שלו מדויק יותר */
+function pickResults(ours, fromFeed){
+  const ok=x=>x && x.status!=='no_data' && x.voters>0;
+  if(!ok(fromFeed)) return ok(ours)? ours : (ours||fromFeed||null);
+  if(!ok(ours)) return fromFeed;
+  return fromFeed.voters>ours.voters? fromFeed : ours;
+}
 async function refreshLive(){
   const [a,b,c,d,e]=await Promise.allSettled([fetchJSON(LIVE_URL), fetchJSON(TURNOUT_URL), fetchJSON(DAY_URL), live.sectors? Promise.resolve(live.sectors) : fetchJSON(SECTORS_URL), fetchJSON(T26_URL)]);
-  live.data= a.status==='fulfilled'? a.value : null;
+  live.data= pickResults(a.status==='fulfilled'? a.value : null, resultsFromFeed(c.status==='fulfilled'? c.value : null, {[PLACE.code]:PLACE.name}));
   live.turnout= b.status==='fulfilled'? b.value : live.turnout;
   live.day= c.status==='fulfilled'? c.value : null;
   live.sectors= d.status==='fulfilled'? d.value : live.sectors;

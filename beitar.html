@@ -85,9 +85,30 @@ function bars(groups, series, maxY=90){
   return `<svg viewBox="0 0 ${W} ${H}" style="direction:ltr">${g}</svg>`;
 }
 
+const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json'; // הזנה פתוחה שמעתיקה את קובץ הוועדה (CORS)
+
+/* תוצאות ישירות מההזנה הפתוחה (CORS) – אותם מספרים של ועדת הבחירות; עובד גם כשהמחשב שמריץ את הלולאה כבוי */
+function resultsFromFeed(day, codes){
+  if(!day || !Array.isArray(day.country) || !Array.isArray(day.parties) || day.country[1]<=0) return null;
+  const unpack=(arr,name)=>{ const [eligible,voters,invalid,valid,vv]=arr; const votes={}; (vv||[]).forEach((n,i)=>{ if(n>0) votes[day.parties[i]]=n; }); return {name, eligible, voters, invalid, valid, votes}; };
+  const c=unpack(day.country,'ארצי'); const towns=day.towns||{}; const places={};
+  Object.entries(codes).forEach(([code,name])=>{ if(towns[code]) places[code]=unpack(towns[code],name); });
+  const label= day.updated_label || ((day.updated||'').slice(11,16));
+  return {updated:day.updated, updated_label:label, asof:day.updated, asof_label:label, source:'feed', status: day.stage==='final'? 'final' : 'partial',
+    localities:Object.keys(towns).length, eligible:c.eligible, voters:c.voters, invalid:c.invalid, valid:c.valid, letters:day.parties.slice(), votes:c.votes, places,
+    counted_pct: typeof day.counted_pct==='number'? day.counted_pct : null};
+}
+/* בוחרים את המקור המתקדם יותר (יותר מצביעים נספרו); בשוויון – הקובץ שלנו, שזמן "נכון ל-" שלו מדויק יותר */
+function pickResults(ours, fromFeed){
+  const ok=x=>x && x.status!=='no_data' && x.voters>0;
+  if(!ok(fromFeed)) return ok(ours)? ours : (ours||fromFeed||null);
+  if(!ok(ours)) return fromFeed;
+  return fromFeed.voters>ours.voters? fromFeed : ours;
+}
 async function main(){
-  const [a,b,c]=await Promise.allSettled([fetchJSON('live/turnout.json'), fetchJSON('live/turnout26.json'), fetchJSON('live/results.json')]);
-  const T= a.status==='fulfilled'? a.value : {}; const T26= b.status==='fulfilled'? b.value : null; const RES= c.status==='fulfilled'? c.value : null;
+  const [a,b,c,d]=await Promise.allSettled([fetchJSON('live/turnout.json'), fetchJSON('live/turnout26.json'), fetchJSON('live/results.json'), fetchJSON(DAY_URL)]);
+  const T= a.status==='fulfilled'? a.value : {}; const T26= b.status==='fulfilled'? b.value : null;
+  const RES= pickResults(c.status==='fulfilled'? c.value : null, resultsFromFeed(d.status==='fulfilled'? d.value : null, Object.fromEntries(CITIES.map(x=>[x.code,x.name]))));
   // קצב ארצי 2022 לפי שעה (לאומדן "2022 באותה שעה")
   const k25=T.k25||{}; const pts=[[7,0]]; HOURS.forEach(s=>{ if(k25[s]!=null) pts.push([parseInt(s,10),k25[s]]); });
   const nat25At=h=>{ if(!isFinite(h)||h<=7) return 0; if(h>=pts[pts.length-1][0]) return pts[pts.length-1][1]; for(let i=1;i<pts.length;i++){ const [h0,v0]=pts[i-1],[h1,v1]=pts[i]; if(h<=h1) return v0+(v1-v0)*(h-h0)/(h1-h0); } return 0; };
