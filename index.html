@@ -89,6 +89,27 @@ details .body p{margin:6px 0}
 .thr .t:after{content:'';position:absolute;right:calc(100% * 3.25/4.5);top:-4px;height:20px;border-right:2px dashed var(--down)}
 .thr .lab{grid-column:2;font-size:11.5px;color:var(--down);text-align:right;padding-right:calc(100% * 3.25/4.5 - 36px)}
 .note{font-size:12.5px;color:var(--ink3);margin-top:8px;line-height:1.5}
+/* ספקולציות */
+.spec select{font:inherit;font-size:15px;font-weight:600;padding:7px 10px;border:1px solid var(--line2);border-radius:var(--r);background:#fff;color:var(--ink);min-width:220px}
+.spec .lead{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font-size:14px;color:var(--ink2);margin:10px 0 4px}
+.spec .lead b{color:var(--ink)}
+.spec .res{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.spec .box{border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;background:#fff}
+.spec .box h4{margin:0 0 8px;font-size:14px;font-weight:700;color:var(--ink2)}
+.spec .big{font-size:30px;font-weight:800;line-height:1;margin:2px 0 4px}
+.spec .big small{font-size:13px;font-weight:500;color:var(--ink2)}
+.spec .who{font-size:14px;margin:4px 0}
+.spec .who b{font-weight:700}
+.spec .ctx{font-size:12.5px;color:var(--ink3);line-height:1.5}
+.spec .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:5px;background:var(--acc-soft);color:var(--acc);vertical-align:2px;margin-inline-start:6px}
+.spec .tag.est{background:#f3e7df;color:#9c452f}
+.spec .w{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px;margin-top:8px}
+.spec .w label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px}
+.spec .w input{width:62px;font:inherit;font-size:13.5px;padding:4px 6px;border:1px solid var(--line2);border-radius:6px;text-align:center}
+.spec .w .sum{font-size:12.5px;color:var(--ink3);grid-column:1/-1}
+.spec .w .sum.bad{color:var(--down);font-weight:600}
+.spec .lnk{font:inherit;font-size:12.5px;color:var(--acc);background:none;border:0;cursor:pointer;padding:0;text-decoration:underline}
+@media (max-width:640px){ .spec .res{grid-template-columns:1fr} .spec .big{font-size:26px} }
 .empty{color:var(--ink2);padding:24px 0;text-align:center}
 @media (max-width:640px){ .hd{grid-template-columns:1fr} .hd .big{text-align:right} .hd h1{font-size:31px} .two,.parties{grid-template-columns:1fr} .party .seats{font-size:34px} td,th{padding:6px 4px;font-size:13px} .wrap{padding:10px 10px 50px} }
 @media print{ body{background:#fff} .nav{display:none} .card,.party,details{break-inside:avoid} }
@@ -233,6 +254,74 @@ function turnoutCard(T,T26){
   return `<details open><summary>אחוזי הצבעה ביום הבחירות <small>לפי שעות ולפי מגזר, מול 2022</small></summary><div class="body"><div class="two"><div><h3>ארצי · לפי שעת דיווח</h3><table class="num"><tr><th>שעה</th><th class="n">2026</th><th class="n">2022</th><th class="n">הפרש</th></tr>${rows}</table></div><div>${sect}</div></div><div class="note">מקורות: דיווחי ועדת הבחירות לפי שעה; אומדני המגזרים: votes26.com (מדגם קלפיות). 2022: דיווחי הוועדה באותו יום.</div></div></details>`;
 }
 
+/* ---------- מחשבון ספקולציות ---------- */
+// מאיפה היו מגיעים קולות נוספים לכל מפלגה (הערכה לפי קרבה פוליטית; ניתן לעריכה במסך). משקלים באחוזים, לפי אותיות.
+const NEIGHBORS={
+  likud:   {'ט':35,'ב':35,'שס':15,'דרך':15},
+  rzd:     {'ב':50,'מחל':40,'ך':10},
+  otzma:   {'ט':50,'מחל':35,'ך':15},
+  amcha:   {'ב':40,'ט':30,'מחל':30},
+  shas:    {'מחל':40,'ג':35,'ב':25},
+  utj:     {'שס':60,'ב':20,'ט':10,'מחל':10},
+  yashar:  {'רק':40,'אמת':20,'ל':20,'מחל':20},
+  beyachad:{'דרך':40,'ל':25,'מחל':20,'ט':15},
+  dem:     {'דרך':60,'רק':20,'ודם':10,'עם':10},
+  yb:      {'רק':40,'דרך':40,'מחל':20},
+  milu:    {'דרך':50,'רק':30,'ל':20},
+  raam:    {'ודם':80,'אמת':20},
+  joint:   {'עם':80,'אמת':20},
+};
+const WASTED_POOL={haredi:['נר','זך'], right:['ך','ני'], left:['די'], arab:[]}; // רשימות שלא עברו, לפי הגוש שהן קרובות אליו
+let SPEC=(()=>{ try{ return JSON.parse(localStorage.getItem('k26.spec'))||{}; }catch(e){ return {}; } })();
+if(!SPEC.party) SPEC.party='utj'; if(!SPEC.w) SPEC.w={};
+let LAST=null;
+const seatMap=votes=>Object.fromEntries(allocate(votes).R.map(r=>[r.id,r.seats]));
+function nameOfLetter(l){ const x=LISTS.find(z=>z.letter===l); return x? x.name : (SMALL_NAMES[l]||l); }
+// מחפש את מספר הקולות המינימלי (במנות של 100) שמשנה את מספר המנדטים של המפלגה; dir=+1 להוספה, -1 להורדה
+function findStep(base, id, dir, weights){
+  const letter=byIdL(id).letter, base0=seatMap(base)[id]; const w=weights||{}; const wsum=Object.values(w).reduce((a,b)=>a+b,0);
+  for(let x=100;x<=400000;x+=100){
+    const v={...base}; v[letter]=Math.max(0,(v[letter]||0)+dir*x);
+    if(wsum>0) Object.entries(w).forEach(([l,p])=>{ if(!p) return; v[l]=Math.max(0,(v[l]||0)-dir*x*p/wsum); }); // במעבר: השכנים מאבדים (או מקבלים) את אותם קולות
+    const sm=seatMap(v);
+    if((dir>0 && sm[id]>base0) || (dir<0 && sm[id]<base0)){
+      const b=seatMap(base); const changed=LISTS.filter(l=>sm[l.id]!==b[l.id] && l.id!==id).map(l=>({name:l.name, d:sm[l.id]-b[l.id]}));
+      return {x, changed, seats:sm[id]};
+    }
+  }
+  return null;
+}
+const byIdL=id=>LISTS.find(l=>l.id===id);
+function renderSpec(){
+  const el=document.getElementById('spec'); if(!el||!LAST) return;
+  const {M,P}=LAST; const id=SPEC.party; const l=byIdL(id); const base=M.proj; const pR=Object.fromEntries(P.R.map(r=>[r.id,r]));
+  const w=Object.assign({}, NEIGHBORS[id]||{}, SPEC.w[id]||{}); const wsum=Object.values(w).reduce((a,b)=>a+b,0);
+  const nonVoters=Math.max(0, FULL_ELIGIBLE-M.projVoters);
+  const pool=(WASTED_POOL[l.bloc]||[]).filter(x=>M.proj[x]>0 && M.proj[x]/M.projValid<THR); const poolVotes=pool.reduce((a,x)=>a+M.proj[x],0);
+  const allWasted=M.parties.filter(x=>M.proj[x]/M.projValid<THR).reduce((a,x)=>a+M.proj[x],0);
+  const up=findStep(base,id,+1,null), upT=findStep(base,id,+1,w), dn=findStep(base,id,-1,null), dnT=findStep(base,id,-1,w);
+  const who=(r,verb)=> r? (r.changed.length? r.changed.map(c=>`<b>${esc(c.name)}</b> (${c.d>0?'+':''}${c.d})`).join(', ') : 'אף אחד (שינוי במודד בלבד)') : '—';
+  const fmtX=r=> r? `<div class="big num">${fmt(r.x)} <small>קולות</small></div>` : `<div class="big num">—</div>`;
+  let h=`<h2>מחשבון ספקולציות</h2><div class="sub">על מספרי התחזית לסיום הספירה. בוחרים מפלגה: כמה קולות חסרים לה למנדט הבא, מי היה מפסיד אותו, וכמה היא יכולה לאבד לפני שתרד מנדט.</div>
+    <div class="lead"><select id="specSel">${LISTS.filter(x=>M.proj[x.letter]>0).map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+      <span><b>${pR[id].seats}</b> מנדטים בתחזית</span><span><b>${fmt(base[l.letter])}</b> קולות צפויים</span><span>מחיר מנדט <b>${fmt(P.quota)}</b></span></div>`;
+  h+=`<div class="res num">
+    <div class="box"><h4>למנדט הבא · קולות חדשים <span class="tag">נתון</span></h4>${fmtX(up)}<div class="who">מפסיד: ${who(up)}</div>
+      <div class="ctx">קולות שלא היו בספירה: מי שלא הצביע (${fmt(nonVoters)} בעלי זכות בחירה) או קולות שנזרקו ברשימות שלא עברו (${fmt(allWasted)} בסך הכול${pool.length?`, מהן הקרובות: ${pool.map(x=>esc(nameOfLetter(x))).join(' + ')} = ${fmt(poolVotes)}`:''}).${up?` זה ${pc(up.x/nonVoters,2)} ממי שלא הצביע${poolVotes?( up.x>poolVotes? `, יותר מכל ${fmt(poolVotes)} הקולות שנזרקו ברשימות הקרובות` : `, או ${pc(up.x/poolVotes)} מהקולות שנזרקו ברשימות הקרובות`):''}.`:''}</div></div>
+    <div class="box"><h4>למנדט הבא · מעבר ממפלגות קרובות <span class="tag est">הערכה</span></h4>${fmtX(upT)}<div class="who">מפסיד: ${who(upT)}</div>
+      <div class="ctx">הקולות יורדים מהמפלגות הקרובות לפי המשקלים שלמטה${upT&&wsum?`: ${Object.entries(w).filter(([,p])=>p>0).map(([x,p])=>`${esc(nameOfLetter(x))} ${fmt(upT.x*p/wsum)}`).join(' · ')}`:''}.</div></div>
+    <div class="box"><h4>המרווח למטה · קולות שנעלמים <span class="tag">נתון</span></h4>${fmtX(dn)}<div class="who">המנדט עובר ל: ${who(dn)}</div><div class="ctx">כמה קולות המפלגה יכולה לאבד (מצביעים שנשארים בבית) לפני שתרד מנדט.</div></div>
+    <div class="box"><h4>המרווח למטה · מעבר למפלגות קרובות <span class="tag est">הערכה</span></h4>${fmtX(dnT)}<div class="who">המנדט עובר ל: ${who(dnT)}</div><div class="ctx">הקולות עוברים לאותן מפלגות קרובות לפי המשקלים.</div></div></div>`;
+  h+=`<h4 style="margin:14px 0 2px;font-size:14px;color:var(--ink2)">מאיפה הקולות של ${esc(l.name)} היו באים · משקלים באחוזים <span class="tag est">הערכה, ניתן לשנות</span> <button class="lnk" id="specReset">איפוס</button></h4>
+    <div class="w">${Object.entries(w).map(([x,p])=>`<label><span>${esc(nameOfLetter(x))}</span><input type="number" min="0" max="100" step="5" data-l="${esc(x)}" value="${p}"></label>`).join('')}<div class="sum ${wsum===100?'':'bad'}">סה"כ ${wsum}%${wsum===100?'':' (מנורמל ל-100%)'}</div></div>
+    <div class="note">המעברים בין מפלגות הם הנחה, לא מדידה: אין נתון על לאן היה הולך הקול הבא של כל מפלגה. המספרים ה"קשיחים" הם חישוב בדר-עופר מלא עם הסכמי העודפים על התחזית; הם משתנים עם כל עדכון של הספירה.</div>`;
+  el.innerHTML=h;
+  el.querySelector('#specSel').onchange=e=>{ SPEC.party=e.target.value; saveSpec(); renderSpec(); };
+  el.querySelectorAll('.w input').forEach(inp=>{ inp.onchange=()=>{ const cur=Object.assign({}, NEIGHBORS[id]||{}, SPEC.w[id]||{}); cur[inp.dataset.l]=Math.max(0,parseFloat(inp.value)||0); SPEC.w[id]=cur; saveSpec(); renderSpec(); }; });
+  el.querySelector('#specReset').onclick=()=>{ delete SPEC.w[id]; saveSpec(); renderSpec(); };
+}
+function saveSpec(){ try{ localStorage.setItem('k26.spec',JSON.stringify(SPEC)); }catch(e){} }
+
 /* ---------- דף ---------- */
 async function main(){
   const [a,b,c,d,e,f]=await Promise.allSettled([fetchJSON(DAY_URL), fetchJSON('live/results.json'), fetchJSON('live/turnout.json'), fetchJSON('live/k25_towns.json'), fetchJSON('live/remaining.json'), fetchJSON('live/turnout26.json')]);
@@ -290,6 +379,7 @@ async function main(){
     ${below.map(x=>`<div>${esc(x.l?x.l.name:(SMALL_NAMES[x.p]||x.p))}</div><div class="t"><span style="width:${Math.min(100,x.share/0.045*100).toFixed(1)}%;background:${x.l?x.l.color:'#b9b2a2'}"></span></div><div>${pc(x.share,2)} · ${fmt(x.votes)}</div>`).join('')}</div>
     <div class="note">קולות שצפויים להתבזבז: ${BLOCS.filter(([b])=>wasted[b]>0).map(([b,n])=>`${n} ${fmt(wasted[b])}`).join(' · ')||'—'} · בסך הכול ${fmt(Object.values(wasted).reduce((a,b)=>a+b,0))} (${pc(Object.values(wasted).reduce((a,b)=>a+b,0)/M.projValid)} מהכשרים).</div></div>`; }
 
+  h+=`<div class="card spec" id="spec"></div>`;
   /* שעות */
   h+=turnoutCard(T,T26);
 
@@ -306,6 +396,7 @@ async function main(){
     <p>מקורות: ועדת הבחירות המרכזית – תוצאות לפי יישובים ולפי קלפיות (דרך ההזנה הפתוחה election-il-2026 ואתר המיפוי הממשלתי), תוצאות הכנסת ה-25 לפי יישובים וקלפיות.</p></div></details>`;
   h+=`<div class="note">הופק ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})} · הדף מתעדכן לבד כל 2 דקות · התחזית היא הערכה ומשתנה ככל שהספירה מתקדמת.</div>`;
   $('#app').innerHTML=h;
+  LAST={M,P}; renderSpec();
 }
 function run(){ main().catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; console.error(e); }); }
 run(); setInterval(run,120000);
