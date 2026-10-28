@@ -652,12 +652,18 @@ function weightedPoll(){
 const allPolls=()=>{ const w=weightedPoll(); return w? [...S.polls, w] : S.polls.slice(); };
 function fillPollPick(){
   const sel=$('pollPick'); sel.innerHTML='';
+  // תוצאות אמת (ספירת ועדת הבחירות) – אפשרות ראשונה ברשימה ברגע שיש קובץ תוצאות
+  const hasLive= typeof live!=='undefined' && live.data && live.data.status!=='no_data';
+  if(hasLive){ const o=document.createElement('option'); o.value='live'; o.textContent=`תוצאות אמת – ספירת הוועדה (עודכן ${live.data.updated_label||''}${live.data.status==='final'?', סופי':''})`; sel.appendChild(o); }
   allPolls().forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=`${p.name} (${p.date})`; sel.appendChild(o); });
-  if(!allPolls().find(p=>p.id===S.pollPick)) S.pollPick=S.polls[0]?.id;
+  if(S.pollPick==='live' && !hasLive) S.pollPick=S.polls[0]?.id;
+  if(S.pollPick!=='live' && !allPolls().find(p=>p.id===S.pollPick)) S.pollPick=S.polls[0]?.id;
   sel.value=S.pollPick||'';
+  $('btnFill').textContent= S.pollPick==='live'? 'טען תוצאות אמת' : 'מלא לפי סקר';
 }
-$('pollPick').addEventListener('change',e=>{ S.pollPick=e.target.value; save(); });
+$('pollPick').addEventListener('change',e=>{ S.pollPick=e.target.value; save(); $('btnFill').textContent= S.pollPick==='live'? 'טען תוצאות אמת' : 'מלא לפי סקר'; });
 $('btnFill').onclick=()=>{
+  if(S.pollPick==='live'){ applyLive(); window.scrollTo(0,0); return; }
   const p=allPolls().find(x=>x.id===S.pollPick); if(!p) return;
   const voters=Math.round(S.eligible*0.70);
   const validTarget=Math.round(voters*(1-0.006));
@@ -840,6 +846,8 @@ async function refreshLive(){
   live.day= c.status==='fulfilled'? c.value : null;
   live.sectors= d.status==='fulfilled'? d.value : live.sectors;
   live.t26= e.status==='fulfilled' && Array.isArray(e.value.reports)? e.value : live.t26;
+  const lk= live.data && live.data.status!=='no_data'? (live.data.updated||'')+live.data.status : '';
+  if(lk!==live.pickKey){ live.pickKey=lk; fillPollPick(); }
   renderLive();
   if(S.liveAuto && live.data && live.data.status!=='no_data' && live.data.updated!==S.liveApplied) applyLive();
 }
