@@ -6,7 +6,7 @@ set UA=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
 :loop
 echo.
 echo [%date% %time:~0,8%] downloading...
-curl -s -m 90 -A "%UA%" -o live\expc.csv https://media26.bechirot.gov.il/files/expc.csv
+curl -s -R -m 90 -A "%UA%" -o live\expc.csv https://media26.bechirot.gov.il/files/expc.csv
 python scripts\fetch_results.py --file live\expc.csv --out live\results.json
 git pull -q --rebase --autostash origin main || git rebase --abort
 git add live\results.json live\turnout.json live\turnout26.json

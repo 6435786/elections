@@ -390,6 +390,10 @@ def main():
             print("CEC file is empty (%d bytes)" % len(raw))
         else:
             d = summarize(decode(raw), a.file or a.url)
+            if a.file:  # זמן הפרסום של הקובץ בוועדה (curl -R שומר את Last-Modified); updated = זמן הבדיקה
+                asof = datetime.fromtimestamp(os.path.getmtime(a.file), IL)
+                d["asof"] = asof.isoformat(timespec="seconds")
+                d["asof_label"] = asof.strftime("%H:%M") if asof.date() == datetime.now(IL).date() else asof.strftime("%d.%m %H:%M")
             if d["localities"] > 0:
                 data = d
             else:
@@ -415,6 +419,12 @@ def main():
         try:
             old = json.load(open(a.out, encoding="utf-8"))
             same = all(old.get(k) == data[k] for k in ("localities", "eligible", "voters", "invalid", "valid", "votes"))
+            if same and old.get("asof") != data.get("asof"):  # אותם מספרים, אבל זמן הפרסום (נכון ל-) חדש או חסר – לעדכן רק אותו
+                old["asof"], old["asof_label"] = data.get("asof"), data.get("asof_label")
+                with open(a.out, "w", encoding="utf-8") as f:
+                    json.dump(old, f, ensure_ascii=False, indent=1)
+                print("asof updated: %s" % data.get("asof_label"))
+                return 0
             if same:
                 print("unchanged: %d localities, %d valid votes" % (data["localities"], data["valid"]))
                 return 0

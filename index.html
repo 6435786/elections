@@ -654,7 +654,7 @@ function fillPollPick(){
   const sel=$('pollPick'); sel.innerHTML='';
   // תוצאות אמת (ספירת ועדת הבחירות) – אפשרות ראשונה ברשימה ברגע שיש קובץ תוצאות
   const hasLive= typeof live!=='undefined' && live.data && live.data.status!=='no_data';
-  if(hasLive){ const o=document.createElement('option'); o.value='live'; o.textContent=`תוצאות אמת – ספירת הוועדה (עודכן ${live.data.updated_label||''}${live.data.status==='final'?', סופי':''})`; sel.appendChild(o); }
+  if(hasLive){ const o=document.createElement('option'); o.value='live'; o.textContent=`תוצאות אמת – ספירת הוועדה (נכון ל-${live.data.asof_label||live.data.updated_label||''}${live.data.status==='final'?', סופי':''})`; sel.appendChild(o); }
   allPolls().forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=`${p.name} (${p.date})`; sel.appendChild(o); });
   if(S.pollPick==='live' && !hasLive) S.pollPick=S.polls[0]?.id;
   if(S.pollPick!=='live' && !allPolls().find(p=>p.id===S.pollPick)) S.pollPick=S.polls[0]?.id;
@@ -928,7 +928,7 @@ function renderLive(){
   if(has){
     const counted= d.counted_pct!=null? d.counted_pct/100 : (d.eligible? d.eligible/FULL_ELIGIBLE : 0);
     const what= d.counted_pct!=null? `מהקלפיות (${fmt(d.kalpi_counted)} מתוך ${fmt(d.kalpi)})` : 'מבעלי זכות הבחירה';
-    $('liveMain').innerHTML=`ספירת קולות: נספרו <b>${pct1(counted)}</b> ${what} · ${fmt(d.localities)} יישובים · עודכן ${esc(d.updated_label||'')}${d.status==='final'?' · <b>סופי</b>':''}`;
+    $('liveMain').innerHTML=`ספירת קולות: נספרו <b>${pct1(counted)}</b> ${what} · ${fmt(d.localities)} יישובים · <b>נכון ל-${esc(d.asof_label||d.updated_label||'')}</b>${d.status==='final'?' · <b>סופי</b>':''}`;
     $('liveApplied').textContent= S.liveApplied===d.updated? 'המחשבון מציג את הנתונים האלה' : '';
     $('liveSrc').textContent='מקורות: ועדת הבחירות המרכזית (אחוזי הצבעה לפי שעת דיווח; קובץ תוצאות לפי יישובים, מתעדכן כל כ-5 דקות). נתוני 2022 מדיווחי הוועדה באותו יום.';
   } else {
