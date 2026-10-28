@@ -954,7 +954,10 @@ function renderLive(){
   if(has){
     const counted= d.counted_pct!=null? d.counted_pct/100 : (d.eligible? d.eligible/FULL_ELIGIBLE : 0);
     const what= d.counted_pct!=null? `מהקלפיות (${fmt(d.kalpi_counted)} מתוך ${fmt(d.kalpi)})` : 'מבעלי זכות הבחירה';
-    $('liveMain').innerHTML=`ספירת קולות: נספרו <b>${pct1(counted)}</b> ${what} · ${fmt(d.localities)} יישובים · <b>נכון ל-${esc(d.asof_label||d.updated_label||'')}</b>${d.status==='final'?' · <b>סופי</b>':''}`;
+    // אחוז מהקולות: המצביעים שנספרו מתוך הצפוי (בעלי זכות בחירה × אחוז ההצבעה בסגירה)
+    const closeT=(live.turnout&&live.turnout.k26&&live.turnout.k26['22:00'])||null; const expVotes= closeT? FULL_ELIGIBLE*closeT/100 : null;
+    const votesShare= expVotes&&d.voters? Math.min(1,d.voters/expVotes) : null;
+    $('liveMain').innerHTML=`ספירת קולות: נספרו <b>${pct1(counted)}</b> ${what}${votesShare!=null?` · <b>${pct1(votesShare)}</b> מהקולות הצפויים`:''} · ${fmt(d.localities)} יישובים · <b>נכון ל-${esc(d.asof_label||d.updated_label||'')}</b>${d.status==='final'?' · <b>סופי</b>':''}`;
     $('liveApplied').textContent= S.liveApplied===d.updated? 'המחשבון מציג את הנתונים האלה' : '';
     $('liveSrc').textContent='מקורות: ועדת הבחירות המרכזית (אחוזי הצבעה לפי שעת דיווח; קובץ תוצאות לפי יישובים, מתעדכן כל כ-5 דקות). נתוני 2022 מדיווחי הוועדה באותו יום.';
   } else {

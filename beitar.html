@@ -68,7 +68,7 @@ const P25={"1309":{"eligible":23395,"voters":19737,"valid":19637,"votes":{"שס"
 const MAP22={'ג':['ג'],'שס':['שס'],'מחל':['מחל'],'ט':['ט'],'ל':['ל'],'עם':['עם'],'ודם':['ום','ד'],'אמת':['אמת','מרצ']};
 const PARTY_NAMES={'ג':'יהדות התורה','שס':'ש"ס','ב':'עוצמה יהודית','מחל':'הליכוד','ט':'הציונות הדתית וזהות','זך':'הציבור החרדי','נר':'צבע שחור','דרך':'ישר!','אמת':'הדמוקרטים','רק':'ביחד','ל':'ישראל ביתנו','ך':'עמך ישראל','די':'המילואימניקים','עם':'רע"ם','ודם':'הרשימה המשותפת','ני':'נעם לישראל','פה':'אני ואתה'};
 const HOURS=['10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
-const K25_FINAL=70.63;
+const K25_FINAL=70.63, FULL_ELIGIBLE=7331981;
 const $=id=>document.getElementById(id);
 const fmt=n=>(n==null||isNaN(n))?'—':Math.round(n).toLocaleString('he-IL');
 const pc=(v,d=1)=> v==null||isNaN(v)? '—' : v.toFixed(d)+'%';
@@ -139,7 +139,8 @@ async function main(){
   const state= hasRes? (RES.status==='final'? 'תוצאות סופיות' : 'ספירה חלקית') : 'טרם פורסמו תוצאות';
   h+=`<h1>${PLACE.name} – בחירות לכנסת ה-26</h1><div class="sub">27.10.2026 · ${esc(state)}${asof? `, <b>נכון ל-${esc(asof)}</b>`:''} · הדף מתעדכן לבד · הופק ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}</div>`;
   const f26=final26(PLACE.code);
-  if(hasRes && RES.kalpi){ h+=`<div class="kalpi num">נספרו <b>${fmt(RES.kalpi_counted)}</b> מתוך ${fmt(RES.kalpi)} קלפיות בארץ (${pc(RES.kalpi_counted/RES.kalpi*100)})${p&&p.kalpi? ` · בביתר עילית <b>${fmt(p.kalpi_counted)}</b> מתוך ${fmt(p.kalpi)} קלפיות (${pc(p.kalpi_counted/p.kalpi*100)})` : ''}</div>`; }
+  const closeT=(T.k26&&T.k26['22:00'])||null; const votesShare= closeT&&hasRes&&RES.voters? Math.min(100,RES.voters/(FULL_ELIGIBLE*closeT/100)*100) : null;
+  if(hasRes && (RES.kalpi||votesShare!=null)){ h+=`<div class="kalpi num">${RES.kalpi?`נספרו <b>${fmt(RES.kalpi_counted)}</b> מתוך ${fmt(RES.kalpi)} קלפיות בארץ (${pc(RES.kalpi_counted/RES.kalpi*100)})`:''}${votesShare!=null?`${RES.kalpi?' · ':''}<b>${pc(votesShare)}</b> מהקולות הצפויים (${fmt(RES.voters)} מתוך ≈${fmt(FULL_ELIGIBLE*closeT/100)}, לפי אחוז הצבעה ${closeT}% בסגירה)`:''}${p&&p.kalpi? ` · בביתר עילית <b>${fmt(p.kalpi_counted)}</b> מתוך ${fmt(p.kalpi)} קלפיות (${pc(p.kalpi_counted/p.kalpi*100)})` : ''}</div>`; }
   h+=`<div class="kpis num">
     <div class="kpi acc"><div class="l">אחוז הצבעה 2026</div><div class="v">${pc(f26)}</div></div>
     <div class="kpi"><div class="l">מצביעים מתוך ${fmt(p&&p.eligible||PLACE.eligible26)} בז"ב</div><div class="v">${p?fmt(p.voters):'—'}</div></div>
