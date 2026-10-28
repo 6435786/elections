@@ -457,8 +457,8 @@ function compute(){
   let k=0;
   while(remaining>0 && k<200){
     k++;
-    const elig=units.filter(u=>u.seats<60); // כלל 60
-    if(!elig.length){ out.warnings.push('כל היחידות הגיעו ל-60 מנדטים – נותרו מנדטים לא מחולקים.'); break; }
+    const elig=units.filter(u=>!(u.seats*2>120 && u.votes*2>valid)); // סעיף 81(ד)(4): יותר ממחצית הקולות הכשרים ויותר ממחצית המנדטים
+    if(!elig.length){ out.warnings.push('אין רשימה הזכאית למנדט עודף – נותרו מנדטים לא מחולקים.'); break; }
     let best=null, ties=[];
     elig.forEach(u=>{ if(!best){best=u;ties=[u];return;} const a=u.votes*(best.seats+1), b=best.votes*(u.seats+1); if(a>b){best=u;ties=[u];} else if(a===b){ties.push(u);} });
     const row={n:120-remaining+1, q:units.map(u=>({u, q:u.votes/(u.seats+1), ex:u.seats>=60})), winner:best, tie:ties.length>1?ties.map(t=>t.name):null};

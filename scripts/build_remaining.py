@@ -20,6 +20,9 @@ EXPB25 = "https://media25.bechirot.gov.il/files/expb.csv"
 STATIONS_XLSX = "https://www.gov.il/BlobFolder/generalpage/turnout_at_polling_stations/he/voter_turnout_20.xlsx"
 KEEP = ["מחל", "פה", "כן", "ט", "שס", "ג", "ל", "אמת", "מרצ", "ום", "ד", "עם", "ב"]  # אותיות 2022 שמהן נגזרות רשימות 2026
 TOL = 0.35  # הפרש בז"ב מותר כדי להחשיב קלפי 2022 כ"אותה קלפי"
+# אות 2026 → האותיות ב-2022 שמהן באים הקולות (זהה ל-PARENTS בדף)
+PARENTS = {"מחל": ["מחל"], "ט": ["ט"], "ב": ["ט"], "שס": ["שס"], "ג": ["ג"], "דרך": ["פה", "כן"], "רק": ["פה", "כן"],
+           "די": ["פה", "כן"], "אמת": ["אמת", "מרצ"], "ל": ["ל"], "עם": ["עם"], "ודם": ["ום", "ד"]}
 
 
 def download(url, dest=None):
@@ -171,9 +174,20 @@ def main():
                         if l in KEEP:
                             prof[l] = prof.get(l, 0) + n * f
         voters_est = elig_un * turnout
+        # שינוי ברמת היישוב: באותן קלפיות שכבר נספרו (ויש להן קלפי תואמת ב-2022), כמה כל רשימה קיבלה
+        # השנה לעומת מה שקיבלו שם ב-2022 הרשימות שמהן היא באה. זה מחליף את השינוי הארצי כשהבסיס מספיק גדול.
+        swing = {}
+        mb = [(have[b], prev[code][b]) for b in have if prev.get(code, {}).get(b) and prev[code][b]["k"]
+              and abs(prev[code][b]["e"] - have[b]["e"]) / max(prev[code][b]["e"], have[b]["e"]) <= TOL]
+        v26 = sum(x["k"] for x, _ in mb); v22 = sum(y["k"] for _, y in mb)
+        if v26 >= 1500 and v22 >= 1500:
+            for l, P in PARENTS.items():
+                s26 = sum(x["votes"].get(l, 0) for x, _ in mb); s22 = sum(sum(y["votes"].get(p, 0) for p in P) for _, y in mb)
+                if s22 >= 100 and s26 >= 20:
+                    swing[l] = round((s26 / v26) / (s22 / v22), 3)
         towns[code] = {"bt": len(bx), "bc": len(bx) - len(missing), "elig_un": elig_un, "voters_est": round(voters_est),
                        "valid_est": round(voters_est * valid_ratio), "matched": matched, "unmatched": unmatched,
-                       "profile": {l: round(n) for l, n in prof.items() if n >= 0.5}}
+                       "profile": {l: round(n) for l, n in prof.items() if n >= 0.5}, "swing": swing}
         tot_matched += matched; tot_unmatched += unmatched; tot_voters += voters_est
     res = {"updated": datetime.now(IL).isoformat(timespec="seconds"), "asof": asof.isoformat(timespec="seconds"), "asof_label": asof.strftime("%H:%M"),
            "boxes_total": tot_boxes, "boxes_counted": tot_counted, "boxes_matched": tot_matched, "boxes_unmatched": tot_unmatched,

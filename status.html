@@ -121,6 +121,7 @@ const HAREDI=['3780','6100','3797','2610','1309','922','1137','3660'];
 const MIXED=['3000','8000','3730','6700','7700','4000','70','7400','6600','7100','2630','9000'];
 const CITY_CARDS=['3780','6100','3797','1309','2610','3000'];
 const FULL_ELIGIBLE=7331981, K25_ELIGIBLE=6788804, K25_VOTERS=4794593, K25_CLOSE=70.6, THR=0.0325;
+const DBL_EST=455000, DBL_EST_LABEL='430–480 אלף'; // הערכת ועדת הבחירות המרכזית, 28.10.2026 (ב-2022 היו 462,807)
 const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json';
 const $=s=>document.querySelector(s);
 const fmt=n=>(n==null||isNaN(n))?'—':Math.round(n).toLocaleString('he-IL');
@@ -148,7 +149,7 @@ function allocate(votesByLetter){
     if(pr && !used.has(p)){ units.push({ids:[r.id,p],votes:r.votes+pr.votes}); used.add(r.id); used.add(p); } else { units.push({ids:[r.id],votes:r.votes}); used.add(r.id); } });
   units.forEach(u=>{ u.seats=Math.floor(u.votes/measure); });
   let remaining=120-units.reduce((a,u)=>a+u.seats,0), k=0;
-  while(remaining>0 && k++<200){ const el=units.filter(u=>u.seats<60); if(!el.length) break;
+  while(remaining>0 && k++<200){ const el=units.filter(u=>!(u.seats*2>120 && u.votes*2>valid)); if(!el.length) break; // סעיף 81(ד)(4)
     let best=null; el.forEach(u=>{ if(!best || u.votes*(best.seats+1)>best.votes*(u.seats+1)) best=u; }); best.seats++; remaining--; }
   units.forEach(u=>{ if(u.ids.length===1){ R.find(x=>x.id===u.ids[0]).seats=u.seats; return; }
     const a=R.find(x=>x.id===u.ids[0]), b=R.find(x=>x.id===u.ids[1]); if(!u.seats){a.seats=0;b.seats=0;return;}
@@ -192,7 +193,7 @@ function project(feed, k25, closeT, rem){
   });
   // מעטפות כפולות: לפי 2022, מוגדל ביחס הקולות הצפויים
   const dbl=k25['9999']; let dblRem=0;
-  if(dbl){ const expD=dbl[2]*(FULL_ELIGIBLE*closeT/100)/K25_VOTERS; const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
+  if(dbl){ const expD=DBL_EST; /* הערכת ועדת הבחירות, לא גזירה מ-2022 */ const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
     const sv=shareVec(dbl); const dv=dblRem*(dbl[3]/dbl[2]); parties.forEach(p=>proj[p]+=dv*sv[p]); projVoters+=dblRem; }
   const projValid=Object.values(proj).reduce((a,b)=>a+b,0);
   return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI,boxVoters,boxTowns};
