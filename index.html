@@ -30,10 +30,16 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Heebo","Se
 .srcs{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.5px;color:var(--ink2)}
 .srcs b{color:var(--ink);font-weight:700}
 .srcs i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-inline-start:5px;vertical-align:-1px}
-.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:0 0 6px}
-.kp div{border:1px solid var(--line);border-radius:var(--r);background:var(--card);padding:9px 10px;text-align:center}
+.kp{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:0 0 6px}
+.kp>div{border:1px solid var(--line);border-radius:var(--r);background:var(--card);padding:9px 10px;text-align:center}
 .kp .v{font-size:21px;font-weight:800;line-height:1.1}
 .kp .l{font-size:11.5px;color:var(--ink2);margin-top:2px}
+@media (max-width:640px){
+  .kp{display:block;border:1px solid var(--line);border-radius:var(--r);background:var(--card);padding:2px 12px}
+  .kp>div{display:flex;flex-direction:row-reverse;justify-content:space-between;align-items:baseline;border:0;border-radius:0;padding:7px 0;border-bottom:1px solid var(--line);text-align:right}
+  .kp>div:last-child{border-bottom:0}
+  .kp .v{font-size:17px} .kp .l{font-size:13.5px;margin:0}
+}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin:14px 0}
 .card h2{font-family:"Petek","Heebo",serif;font-weight:900;font-size:24px;margin:0 0 2px;line-height:1.1}
 .card .sub{font-size:13.5px;color:var(--ink2);margin:0 0 12px}
