@@ -256,7 +256,7 @@ async function main(){
   const order=['likud','rzd','otzma','amcha','shas','utj','yashar','beyachad','dem','yb','milu','raam','joint'];
   const solidTotal=order.reduce((s,id)=>s+Math.floor(Math.min(pR[id].seats,backed(id))),0);
   let h='';
-  h+=`<div class="nav"><div class="tabs"><a class="on" href="index.html">ארצי</a><a href="regional.html">אזורי</a></div><a class="more" href="calc.html">מחשבון (מה-אם)</a></div>`;
+  h+=`<div class="nav"><div class="tabs"><a class="on" href="index.html">ארצי</a><a href="regional.html">אזורי</a></div></div>`;
   h+=`<div class="hd"><div><div class="k">בחירות לכנסת ה-26 · 27.10.2026 · ${final?'תוצאות סופיות':'ספירה חלקית'} · נכון ל-<b>${esc(asof)}</b></div><h1>תמונת המצב הארצית</h1>
       <div class="prog">${[[M.countedVoters,''],[M.remPartial,'hatch'],[M.remZero,'hatch'],[M.dblRem,'hatch']].map(([v,k])=>`<span class="${k}" style="width:${(v/M.projVoters*100).toFixed(2)}%;background:${k?'#8fb8b6':'var(--acc)'}"></span>`).join('')}</div>
       <div class="srcs num"><span><i style="background:var(--acc)"></i>נספרו <b>${fmtK(M.countedVoters)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>יישובים חלקיים <b>${fmtK(M.remPartial)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>לא דווחו <b>${fmtK(M.remZero)}</b></span><span><i class="hatch" style="background:#8fb8b6"></i>מעטפות כפולות <b>${fmtK(M.dblRem)}</b></span></div></div>
@@ -284,8 +284,8 @@ async function main(){
       <div class="kv num"><div><span class="k">קולות שנספרו</span><span class="v">${fmt(M.counted[l.letter])}</span></div><div><span class="k">צפויים</span><span class="v">${fmt(M.proj[l.letter])}</span></div><div><span class="k">אחוז עכשיו</span><span class="v">${pc(M.counted[l.letter]/M.countedValid,2)}</span></div><div><span class="k">צפוי</span><span class="v">${pc(M.proj[l.letter]/M.projValid,2)}</span></div><div style="grid-column:1/3"><span class="k">מגובים בקולות שנספרו</span><span class="v">${bk.toFixed(1)} מנדטים</span></div></div></div>`; }).join('')+`</div>`;
 
   /* חסימה + קולות שהתבזבזו */
-  const below=M.parties.map(p=>({p, l:LISTS.find(l=>l.letter===p), share:M.proj[p]/M.projValid, votes:M.proj[p]})).filter(x=>x.share<THR && x.share>=0.004).sort((x,y)=>y.share-x.share);
-  const wasted={}; BLOCS.forEach(([b])=>wasted[b]=0); M.parties.forEach(p=>{ const l=LISTS.find(x=>x.letter===p); if(l && M.proj[p]/M.projValid<THR) wasted[l.bloc]+=M.proj[p]; });
+  const below=M.parties.map(p=>({p, l:LISTS.find(l=>l.letter===p), share:M.proj[p]/M.projValid, votes:M.proj[p]})).filter(x=>x.share<THR && (x.share>=0.004 || ['נר','זך','ני'].includes(x.p))).sort((x,y)=>y.share-x.share);
+  const wasted={}; BLOCS.forEach(([b])=>wasted[b]=0); M.parties.forEach(p=>{ const l=LISTS.find(x=>x.letter===p); if(l && M.proj[p]/M.projValid<THR) wasted[l.bloc]+=M.proj[p]; else if(['נר','זך'].includes(p)) wasted.haredi+=M.proj[p]; });
   if(below.length){ h+=`<div class="card"><h2>מתחת לאחוז החסימה</h2><div class="sub">לפי התחזית, ביחס לקו 3.25%.</div><div class="thr num"><div></div><div class="lab">קו החסימה 3.25%</div><div></div>
     ${below.map(x=>`<div>${esc(x.l?x.l.name:(SMALL_NAMES[x.p]||x.p))}</div><div class="t"><span style="width:${Math.min(100,x.share/0.045*100).toFixed(1)}%;background:${x.l?x.l.color:'#b9b2a2'}"></span></div><div>${pc(x.share,2)} · ${fmt(x.votes)}</div>`).join('')}</div>
     <div class="note">קולות שצפויים להתבזבז: ${BLOCS.filter(([b])=>wasted[b]>0).map(([b,n])=>`${n} ${fmt(wasted[b])}`).join(' · ')||'—'} · בסך הכול ${fmt(Object.values(wasted).reduce((a,b)=>a+b,0))} (${pc(Object.values(wasted).reduce((a,b)=>a+b,0)/M.projValid)} מהכשרים).</div></div>`; }
