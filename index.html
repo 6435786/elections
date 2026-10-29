@@ -349,7 +349,9 @@ async function main(){
   const closeT=(T.k26&&T.k26['22:00'])||77.7;
   const M=project(feed,k25,closeT,REM);
   const final= feed.stage==='final';
-  const asof= (ours && ours.voters===feed.country[1] && ours.asof_label) || feed.updated_label || '';
+  // "נכון ל-": כשהקובץ שלנו וההזנה מציגים את אותה ספירה – השעה המאוחרת מבין שתי החותמות (שתיהן לא מקדימות את הפרסום של הוועדה)
+  const later=(a,b)=>{ if(!a) return b||''; if(!b) return a; return (a.length===5&&b.length===5)? (a>b?a:b) : a; };
+  const asof= (ours && ours.voters===feed.country[1]) ? later(ours.asof_label, feed.updated_label) : (feed.updated_label||'');
   const now=new Date();
   const C=allocate(M.counted), P=allocate(M.proj);
   const byId=id=>LISTS.find(l=>l.id===id);
