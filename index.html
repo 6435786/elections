@@ -313,17 +313,18 @@ function findStep(base, id, dir, weights){
 const byIdL=id=>LISTS.find(l=>l.id===id);
 function renderSpec(){
   const el=document.getElementById('spec'); if(!el||!LAST) return;
-  const {M,P}=LAST; const id=SPEC.party; const l=byIdL(id); const base=M.proj; const pR=Object.fromEntries(P.R.map(r=>[r.id,r]));
+  const {M}=LAST; const useNow=SPEC.base==='now'; const base= useNow? M.counted : M.proj; const P= useNow? allocate(M.counted) : LAST.P; const baseValid= useNow? M.countedValid : M.projValid;
+  const id=SPEC.party; const l=byIdL(id); const pR=Object.fromEntries(P.R.map(r=>[r.id,r]));
   const w=Object.assign({}, NEIGHBORS[id]||{}, SPEC.w[id]||{}); const wsum=Object.values(w).reduce((a,b)=>a+b,0);
   const nonVoters=Math.max(0, FULL_ELIGIBLE-M.projVoters);
-  const pool=(WASTED_POOL[l.bloc]||[]).filter(x=>M.proj[x]>0 && M.proj[x]/M.projValid<THR); const poolVotes=pool.reduce((a,x)=>a+M.proj[x],0);
-  const allWasted=M.parties.filter(x=>M.proj[x]/M.projValid<THR).reduce((a,x)=>a+M.proj[x],0);
+  const pool=(WASTED_POOL[l.bloc]||[]).filter(x=>base[x]>0 && base[x]/baseValid<THR); const poolVotes=pool.reduce((a,x)=>a+base[x],0);
+  const allWasted=M.parties.filter(x=>base[x]/baseValid<THR).reduce((a,x)=>a+base[x],0);
   const up=findStep(base,id,+1,null), upT=findStep(base,id,+1,w), dn=findStep(base,id,-1,null), dnT=findStep(base,id,-1,w);
   const who=(r,verb)=> r? (r.changed.length? r.changed.map(c=>`<b>${esc(c.name)}</b> (${c.d>0?'+':''}${c.d})`).join(', ') : 'אף אחד (שינוי במודד בלבד)') : '—';
   const fmtX=r=> r? `<div class="big num">${fmt(r.x)} <small>קולות</small></div>` : `<div class="big num">—</div>`;
-  let h=`<h2>מחשבון ספקולציות</h2><div class="sub">על מספרי התחזית לסיום הספירה. בוחרים מפלגה: כמה קולות חסרים לה למנדט הבא, מי היה מפסיד אותו, וכמה היא יכולה לאבד לפני שתרד מנדט.</div>
-    <div class="lead"><select id="specSel">${LISTS.filter(x=>M.proj[x.letter]>0).map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
-      <span><b>${pR[id].seats}</b> מנדטים בתחזית</span><span><b>${fmt(base[l.letter])}</b> קולות צפויים</span><span>מחיר מנדט <b>${fmt(P.quota)}</b></span></div>`;
+  let h=`<h2>מחשבון ספקולציות</h2><div class="sub">בוחרים מפלגה: כמה קולות חסרים לה למנדט הבא, מי היה מפסיד אותו, וכמה היא יכולה לאבד לפני שתרד מנדט. על בסיס: <span class="seg" id="specBase"><button data-b="proj" class="${useNow?'':'on'}">התחזית לסיום</button><button data-b="now" class="${useNow?'on':''}">הספירה כרגע</button></span></div>
+    <div class="lead"><select id="specSel">${LISTS.filter(x=>base[x.letter]>0).map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+      <span><b>${pR[id].seats}</b> מנדטים ${useNow?'כרגע':'בתחזית'}</span><span><b>${fmt(base[l.letter])}</b> קולות ${useNow?'שנספרו':'צפויים'}</span><span>מחיר מנדט <b>${fmt(P.quota)}</b></span></div>`;
   h+=`<div class="res num">
     <div class="box"><h4>למנדט הבא · קולות חדשים <span class="tag">נתון</span></h4>${fmtX(up)}<div class="who">מפסיד: ${who(up)}</div>
       <div class="ctx">קולות שלא היו בספירה: מי שלא הצביע (${fmt(nonVoters)} בעלי זכות בחירה) או קולות שנזרקו ברשימות שלא עברו (${fmt(allWasted)} בסך הכול${pool.length?`, מהן הקרובות: ${pool.map(x=>esc(nameOfLetter(x))).join(' + ')} = ${fmt(poolVotes)}`:''}).${up?` זה ${pc(up.x/nonVoters,2)} ממי שלא הצביע${poolVotes?( up.x>poolVotes? `, יותר מכל ${fmt(poolVotes)} הקולות שנזרקו ברשימות הקרובות` : `, או ${pc(up.x/poolVotes)} מהקולות שנזרקו ברשימות הקרובות`):''}.`:''}</div></div>
@@ -333,9 +334,10 @@ function renderSpec(){
     <div class="box"><h4>המרווח למטה · מעבר למפלגות קרובות <span class="tag est">הערכה</span></h4>${fmtX(dnT)}<div class="who">המנדט עובר ל: ${who(dnT)}</div><div class="ctx">הקולות עוברים לאותן מפלגות קרובות לפי המשקלים.</div></div></div>`;
   h+=`<h4 style="margin:14px 0 2px;font-size:14px;color:var(--ink2)">מאיפה הקולות של ${esc(l.name)} היו באים · משקלים באחוזים <span class="tag est">הערכה, ניתן לשנות</span> <button class="lnk" id="specReset">איפוס</button></h4>
     <div class="w">${Object.entries(w).map(([x,p])=>`<label><span>${esc(nameOfLetter(x))}</span><input type="number" min="0" max="100" step="5" data-l="${esc(x)}" value="${p}"></label>`).join('')}<div class="sum ${wsum===100?'':'bad'}">סה"כ ${wsum}%${wsum===100?'':' (מנורמל ל-100%)'}</div></div>
-    <div class="note">המעברים בין מפלגות הם הנחה, לא מדידה: אין נתון על לאן היה הולך הקול הבא של כל מפלגה. המספרים ה"קשיחים" הם חישוב בדר-עופר מלא עם הסכמי העודפים על התחזית; הם משתנים עם כל עדכון של הספירה.</div>`;
+    <div class="note">המעברים בין מפלגות הם הנחה, לא מדידה: אין נתון על לאן היה הולך הקול הבא של כל מפלגה. המספרים ה"קשיחים" הם חישוב בדר-עופר מלא עם הסכמי העודפים, על התחזית לסיום או על הספירה כרגע לפי המתג; הם משתנים עם כל עדכון של הספירה.</div>`;
   el.innerHTML=h;
   el.querySelector('#specSel').onchange=e=>{ SPEC.party=e.target.value; saveSpec(); renderSpec(); };
+  el.querySelectorAll('#specBase button').forEach(b=>b.onclick=()=>{ SPEC.base=b.dataset.b; saveSpec(); renderSpec(); });
   el.querySelectorAll('.w input').forEach(inp=>{ inp.onchange=()=>{ const cur=Object.assign({}, NEIGHBORS[id]||{}, SPEC.w[id]||{}); cur[inp.dataset.l]=Math.max(0,parseFloat(inp.value)||0); SPEC.w[id]=cur; saveSpec(); renderSpec(); }; });
   el.querySelector('#specReset').onclick=()=>{ delete SPEC.w[id]; saveSpec(); renderSpec(); };
 }
