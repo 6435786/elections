@@ -30,6 +30,10 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Heebo","Se
 .srcs{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.5px;color:var(--ink2)}
 .srcs b{color:var(--ink);font-weight:700}
 .srcs i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-inline-start:5px;vertical-align:-1px}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden;vertical-align:middle;margin-inline-start:6px}
+.seg button{font:inherit;font-size:12px;font-weight:600;padding:3px 9px;border:0;background:#fff;color:var(--ink2);cursor:pointer}
+.seg button.on{background:var(--ink);color:#fff}
+.seg button:disabled{color:var(--ink3);cursor:default}
 .kp{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:0 0 6px}
 .kp>div{border:1px solid var(--line);border-radius:var(--r);background:var(--card);padding:9px 10px;text-align:center}
 .kp .v{font-size:21px;font-weight:800;line-height:1.1}
@@ -155,7 +159,8 @@ const HAREDI=['3780','6100','3797','2610','1309','922','1137','3660'];
 const MIXED=['3000','8000','3730','6700','7700','4000','70','7400','6600','7100','2630','9000'];
 const CITY_CARDS=['3780','6100','3797','1309','2610','3000'];
 const FULL_ELIGIBLE=7331981, K25_ELIGIBLE=6788804, K25_VOTERS=4794593, K25_CLOSE=70.6, THR=0.0325;
-let DBL_EST=455000, DBL_EST_LABEL='430–480 אלף'; // הערכת ועדת הבחירות המרכזית, 28.10.2026 (ב-2022 היו 462,807)
+let DBL_EST=455000, DBL_EST_LABEL='430–480 אלף';
+let DBL_MODE=(()=>{ try{ return localStorage.getItem('k26.dblmode')||'2022'; }catch(e){ return '2022'; } })(); // '2022' = דפוס 2022 + השינוי הארצי; 'measured' = לפי המעטפות הכפולות שכבר נספרו השנה // הערכת ועדת הבחירות המרכזית, 28.10.2026 (ב-2022 היו 462,807)
 const DAY_URL='https://navonyaniv.github.io/election-il-2026/results.json';
 const $=s=>document.querySelector(s);
 const fmt=n=>(n==null||isNaN(n))?'—':Math.round(n).toLocaleString('he-IL');
@@ -229,8 +234,9 @@ function project(feed, k25, closeT, rem){
   const extArr=(feed.external&&feed.external[1]>0)? feed.external : (towns['9999']&&towns['9999'][1]>0? towns['9999'] : null);
   const ext={voters: extArr? extArr[1]:0, valid: extArr? extArr[3]:0, votes:{}}; if(extArr && Array.isArray(extArr[4])) parties.forEach((p,i)=>{ if(extArr[4][i]>0) ext.votes[p]=extArr[4][i]; });
   const dbl=k25['9999']; let dblRem=0;
-  if(dbl && feed.stage!=='final'){ const expD=DBL_EST; /* הערכת ועדת הבחירות, לא גזירה מ-2022 */ const ext=feed.external&&feed.external[1]||0; dblRem=Math.max(0,expD-ext);
-    const sv=shareVec(dbl); const dv=dblRem*(dbl[3]/dbl[2]); parties.forEach(p=>proj[p]+=dv*sv[p]); projVoters+=dblRem; }
+  if(dbl && feed.stage!=='final'){ const expD=DBL_EST; /* הערכת ועדת הבחירות, לא גזירה מ-2022 */ dblRem=Math.max(0,expD-ext.voters);
+    let sv=shareVec(dbl); if(DBL_MODE==='measured' && ext.valid>=20000){ sv={}; parties.forEach(p=>sv[p]=(ext.votes[p]||0)/ext.valid); }
+    const dv=dblRem*(dbl[3]/dbl[2]); parties.forEach(p=>proj[p]+=dv*sv[p]); projVoters+=dblRem; }
   const projValid=Object.values(proj).reduce((a,b)=>a+b,0);
   return {parties,counted,proj,countedValid,countedVoters,projValid,projVoters,remPartial,remZero,dblRem,r,townInfo,PI,boxVoters,boxTowns,ext};
 }
@@ -369,7 +375,8 @@ async function main(){
   { const pc_=feed.progress&&feed.progress.country; const kc= pc_? pc_[0] : (ours&&ours.kalpi_counted), kt= pc_? pc_[1] : (ours&&ours.kalpi);
     h+=`<div class="kp num"><div><div class="v">${fmt(feed.country[0]||FULL_ELIGIBLE)}</div><div class="l">בעלי זכות בחירה</div></div><div><div class="v">${fmt(M.countedVoters)}</div><div class="l">קולות עד עתה</div></div><div><div class="v">${kc?fmt(kc):'—'}</div><div class="l">קלפיות עד עתה${kt?` מתוך ${fmt(kt)}`:''}</div></div><div><div class="v">${fmt(M.countedValid)}</div><div class="l">קולות כשרים</div></div><div><div class="v">${fmt(feed.country[2])}</div><div class="l">קולות פסולים</div></div></div>`; }
   if(M.ext && M.ext.voters>0){ const d22=k25['9999']; const sh=(l)=> M.ext.valid? (M.ext.votes[l]||0)/M.ext.valid : null; const sh22=(l)=> d22&&d22[3]? (d22[4][l]||0)/d22[3] : null;
-    h+=`<div class="note num" style="margin:-4px 0 10px"><b>מעטפות כפולות שנספרו: ${fmt(M.ext.voters)}</b> מתוך ≈${fmt(DBL_EST)} · ${['ג','שס','מחל','ט','ב','דרך'].map(l=>`${esc(nameOfLetter(l))} <b>${pc(sh(l))}</b> <span style="color:var(--ink3)">(2022: ${pc(sh22(l))})</span>`).join(' · ')}</div>`; }
+    h+=`<div class="note num" style="margin:-4px 0 10px"><b>מעטפות כפולות שנספרו: ${fmt(M.ext.voters)}</b> מתוך ≈${fmt(DBL_EST)} · ${['ג','שס','מחל','ט','ב','דרך'].map(l=>`${esc(nameOfLetter(l))} <b>${pc(sh(l))}</b> <span style="color:var(--ink3)">(2022: ${pc(sh22(l))})</span>`).join(' · ')}
+      <div style="margin-top:4px">חלוקת ${fmt(M.dblRem)} המעטפות שנותרו בתחזית: <span class="seg" id="dblSeg"><button data-m="2022" class="${DBL_MODE==='2022'?'on':''}">לפי 2022 + השינוי</button><button data-m="measured" class="${DBL_MODE==='measured'?'on':''}" ${M.ext.valid>=20000?'':'disabled'}>לפי הכפולות שנספרו השנה</button></span></div></div>`; }
   if(feed.noTowns) h+=`<div class="note">כרגע אין גישה לנתוני היישובים, ולכן התחזית כוללת רק את הקולות שנספרו ואומדן למעטפות הכפולות.</div>`;
 
   /* הכנסת + גושים */
@@ -408,12 +415,13 @@ async function main(){
     ${M.parties.map(p=>({p,l:LISTS.find(l=>l.letter===p)})).sort((x,y)=>M.proj[y.p]-M.proj[x.p]).filter(x=>M.counted[x.p]>0).map(({p,l})=>`<tr><td>${esc(l?l.name:(SMALL_NAMES[p]||''))} <span style="color:var(--ink3)">${esc(p)}</span></td><td class="n">${l?cR[l.id].seats:0}</td><td class="n"><b>${l?pR[l.id].seats:0}</b></td><td class="n">${fmt(M.counted[p])}</td><td class="n">${pc(M.counted[p]/M.countedValid,2)}</td><td class="n">${pc(M.proj[p]/M.projValid,2)}</td></tr>`).join('')}</table>
     <div class="note">מודד עכשיו: ${fmt(C.measure)} · בתחזית: ${fmt(P.measure)} · כשרים שנספרו: ${fmt(M.countedValid)} · צפויים: ${fmt(M.projValid)} · פסולים: ${fmt(feed.country[2])}</div></div></details>`;
   h+=`<details><summary>איך מחושבת התחזית</summary><div class="body">
-    <p>מה שעוד לא נספר מושלם משני מקורות: <b>קלפיות שחסרות</b> – לפי מה שאותה קלפי (או היישוב) הצביעה ב-2022, מתוקן לפי השינוי שנמדד השנה בקלפיות שכבר נספרו באותו יישוב; ו<b>מעטפות כפולות</b> – ${DBL_EST_LABEL} לפי ועדת הבחירות, מחולקות לפי דפוס המעטפות הכפולות ב-2022 עם השינוי הארצי של כל רשימה.</p>
+    <p>מה שעוד לא נספר מושלם משני מקורות: <b>קלפיות שחסרות</b> – לפי מה שאותה קלפי (או היישוב) הצביעה ב-2022, מתוקן לפי השינוי שנמדד השנה בקלפיות שכבר נספרו באותו יישוב; ו<b>מעטפות כפולות</b> – ${DBL_EST_LABEL} לפי ועדת הבחירות, מחולקות לפי בחירת המתג: דפוס המעטפות הכפולות ב-2022 עם השינוי הארצי של כל רשימה (ברירת מחדל), או לפי מה שנמדד השנה במעטפות שכבר נספרו.</p>
     <p>המנדטים מחושבים לפי חוק הבחירות (סעיפים 81–82): אחוז חסימה 3.25%, מודד, עודפים בשיטת בדר-עופר, והסכמי העודפים שנחתמו. "מגובים" = קולות שנספרו חלקי מחיר המנדט הצפוי.</p>
     <p class="note">מקורות: ועדת הבחירות המרכזית (תוצאות לפי יישובים וקלפיות, 2026 ו-2022; הערכת המעטפות הכפולות).${M.boxVoters?` כרגע ${fmtK(M.boxVoters)} קולות ב-${M.boxTowns} יישובים מוערכים ברמת קלפי, נכון ל-${esc(REM.asof_label||'')}.`:''}</p></div></details>`;
   h+=`<div class="note">הופק ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})} · הדף מתעדכן לבד כל 2 דקות · התחזית היא הערכה ומשתנה ככל שהספירה מתקדמת.</div>`;
   $('#app').innerHTML=h;
   LAST={M,P}; renderSpec();
+  const seg=document.getElementById('dblSeg'); if(seg) seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ DBL_MODE=b.dataset.m; try{ localStorage.setItem('k26.dblmode',DBL_MODE); }catch(e){} run(); });
 }
 function run(){ main().catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; console.error(e); }); }
 run(); setInterval(run,120000);
