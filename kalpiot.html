@@ -178,6 +178,9 @@ table.bx{font-size:12px} table.bx td,table.bx th{padding:4px 5px}
 .mapbar select{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .legend{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--ink3)}
 .legend i{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle;margin-left:4px}
+table.px .sub.up{color:var(--up)} table.px .sub.down{color:var(--down)}
+table.px th.grp{text-align:center;border-inline-start:1px solid var(--line2)}
+table.px td.gs{border-inline-start:1px solid var(--line2)}
 .hint{font-size:13px;color:var(--ink3);margin:6px 0 10px}
 .chips2 span{cursor:pointer;user-select:none}
 .chips2 span.on{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -252,7 +255,7 @@ function strip(st,extra){
 /* ---------- מסך ---------- */
 function controls(){
   const opts=Object.entries(IDX).sort((a,b)=>a[1].name.localeCompare(b[1].name,'he')).map(([c,x])=>`<option value="${esc(x.name)} (${c})">`).join('');
-  let h=`<div class="nav"><div class="seg2" id="mode"><button data-m="nat" class="${ST.mode==='nat'?'on':''}">כלל ארצי</button><button data-m="city" class="${ST.mode==='city'?'on':''}">יישוב</button><button data-m="group" class="${ST.mode==='group'?'on':''}">קבוצת יישובים</button><button data-m="district" class="${ST.mode==='district'?'on':''}">מחוז</button><button data-m="nbhd" class="${ST.mode==='nbhd'?'on':''}">שכונות</button><button data-m="map" class="${ST.mode==='map'?'on':''}">מפה</button></div><a class="more" href="index.html" style="font-size:13px;color:var(--ink3)">לאתר הראשי</a></div>`;
+  let h=`<div class="nav"><div class="seg2" id="mode"><button data-m="nat" class="${ST.mode==='nat'?'on':''}">כלל ארצי</button><button data-m="city" class="${ST.mode==='city'?'on':''}">יישוב</button><button data-m="group" class="${ST.mode==='group'?'on':''}">קבוצת יישובים</button><button data-m="district" class="${ST.mode==='district'?'on':''}">מחוז</button><button data-m="nbhd" class="${ST.mode==='nbhd'?'on':''}">שכונות</button><button data-m="muni" class="${ST.mode==='muni'?'on':''}">מול מוניציפלי 2024</button><button data-m="map" class="${ST.mode==='map'?'on':''}">מפה</button></div><a class="more" href="index.html" style="font-size:13px;color:var(--ink3)">לאתר הראשי</a></div>`;
   h+=`<div class="hd"><div><div class="k">בחירות לכנסת ה-26 · ניתוח לפי קלפיות ומקומות קלפי · 2026 מול 2022</div><h1 id="ttl"></h1></div><div class="big num" id="bigbox"></div></div>`;
   h+=`<div class="ctl">`;
   if(ST.mode==='city') h+=`<label>יישוב</label><div><input type="text" id="pick" list="locs" placeholder="הקלד שם יישוב…" value="${esc(IDX[ST.city]?.name||'')}"><datalist id="locs">${opts}</datalist></div><label>אשכול / קלפי</label><div><input type="text" id="find" placeholder="שם מקום קלפי או מספר קלפי…" value="${esc(FIND)}"></div>`;
@@ -261,6 +264,9 @@ function controls(){
     h+=`<label>עיר</label><div><select id="ncity">${cities.sort((a,b)=>IDX[a].name.localeCompare(IDX[b].name,'he')).map(c=>`<option value="${c}" ${c===ST.ncity?'selected':''}>${esc(IDX[c].name)}</option>`).join('')}</select></div>`;
     const names=nbhdNames(ST.ncity); const sel=(ST.nsel||{})[ST.ncity]||[];
     h+=`<label>שכונות</label><div class="chips2" id="nchips"><span data-n="" class="${!sel.length?'on':''}">כל העיר</span>${names.map(n=>`<span data-n="${esc(n)}" class="${sel.includes(n)?'on':''}">${esc(n)}</span>`).join('')}</div>`; }
+  if(ST.mode==='muni'){ const cities=Object.keys(MU||{}).filter(c=>IDX[c]); if(ST.mcity!=='ner'&&!cities.includes(ST.mcity)) ST.mcity=cities.includes('3780')?'3780':cities[0];
+    h+=`<label>עיר</label><div><select id="mcity"><option value="ner" ${ST.mcity==='ner'?'selected':''}>כל הערים · צבע שחור מול עץ</option>${cities.sort((a,b)=>IDX[a].name.localeCompare(IDX[b].name,'he')).map(c=>`<option value="${c}" ${c===ST.mcity?'selected':''}>${esc(IDX[c].name)}</option>`).join('')}</select></div>`;
+    if(ST.mcity!=='ner') h+=`<label>סה"כ חרדי בכנסת</label><div class="chips2"><label style="cursor:pointer"><input type="checkbox" id="mzach" ${ST.mzach?'checked':''}> כולל הציבור החרדי</label><label style="cursor:pointer"><input type="checkbox" id="mner" ${ST.mner?'checked':''}> כולל צבע שחור</label></div>`; }
   if(ST.mode==='map') h+=`<label>יישוב</label><div><input type="text" id="pick" list="locs" placeholder="הקלד שם יישוב…" value="${esc(IDX[ST.city]?.name||'')}"><datalist id="locs">${opts}</datalist></div>`;
   if(ST.mode==='district') h+=`<label>מחוז</label><div><select id="dist">${DISTRICTS.map(d=>`<option ${d===ST.district?'selected':''}>${d}</option>`).join('')}</select></div>`;
   h+=`</div>`;
@@ -271,6 +277,9 @@ function bind(){
   const pick=$('#pick'); if(pick){ const go=()=>{ const m=/\((\d+)\)\s*$/.exec(pick.value); let code=m?m[1]:null; if(!code){ const e=Object.entries(IDX).find(([c,x])=>x.name===pick.value.trim()); code=e&&e[0]; } if(!code) return; if(ST.mode==='city'||ST.mode==='map'){ ST.city=code; POLY=[]; } else { if(!ST.group.includes(code)) ST.group.push(code); pick.value=''; } OPEN.clear(); save(); render(); }; pick.addEventListener('change',go); pick.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } }); }
   const f=$('#find'); if(f){ let t; f.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{ FIND=f.value.trim(); OPEN.clear(); render().then(()=>{ const g=$('#find'); if(g){ g.focus(); g.setSelectionRange(g.value.length,g.value.length); } }); },350); }; }
   document.querySelectorAll('#gchips b').forEach(b=>b.onclick=()=>{ ST.group=ST.group.filter(c=>c!==b.dataset.c); save(); render(); });
+  const mc=$('#mcity'); if(mc) mc.onchange=()=>{ ST.mcity=mc.value; OPEN.clear(); save(); render(); };
+  for(const k of ['mzach','mner']){ const t=$('#'+k); if(t) t.onchange=()=>{ ST[k]=t.checked; save(); render(); }; }
+  document.querySelectorAll('tr[data-mgo]').forEach(tr=>tr.onclick=()=>{ ST.mcity=tr.dataset.mgo; save(); render(); window.scrollTo(0,0); });
   const nc=$('#ncity'); if(nc) nc.onchange=()=>{ ST.ncity=nc.value; OPEN.clear(); save(); render(); };
   document.querySelectorAll('#nchips span').forEach(sp=>sp.onclick=()=>{ const n=sp.dataset.n; ST.nsel=ST.nsel||{}; let cur=ST.nsel[ST.ncity]||[]; if(!n) cur=[]; else cur= cur.includes(n)? cur.filter(x=>x!==n) : cur.concat([n]); ST.nsel[ST.ncity]=cur; OPEN.clear(); save(); render(); });
   const d=$('#dist'); if(d) d.onchange=()=>{ ST.district=d.value; save(); render(); };
@@ -288,6 +297,7 @@ async function render(){
     else if(ST.mode==='city') h+=await cityView(ST.city);
     else if(ST.mode==='map') h+=await mapView(ST.city);
     else if(ST.mode==='nbhd') h+=await nbhdView();
+    else if(ST.mode==='muni') h+=await muniView();
     else if(ST.mode==='group') h+=groupView(ST.group,'קבוצת יישובים');
     else h+=groupView(Object.keys(IDX).filter(c=>IDX[c].district===ST.district),'מחוז '+ST.district);
   }catch(e){ h+=`<p class="empty">שגיאה: ${esc(e.message)}</p>`; }
@@ -391,6 +401,88 @@ async function nbhdView(){
   return h;
 }
 
+/* ---------- מול מוניציפלי 2024 ---------- */
+const BLOCS=[['דגל התורה','דגל'],['אגודת ישראל','אגודה'],['יהדות התורה (דגל+אגודה)','יהדות התורה (משותפת)'],['ש"ס','ש"ס'],['משותפת: יהדות התורה + ש"ס','משותפת + ש"ס'],['בני תורה (פלג)','בני תורה'],['חרדי כללי','חרדי כללי']];
+let MUCSV=[];
+function muniGroups(mu){ // קבוצות עמודות: גוש → אותיות
+  const g={}; Object.entries(mu.lists).forEach(([l,x])=>{ const b=x.bloc||''; if(!b) return; (g[b]=g[b]||[]).push(l); });
+  const order=BLOCS.map(b=>b[0]); return Object.entries(g).sort((a,b)=>(order.indexOf(a[0])+1||99)-(order.indexOf(b[0])+1||99));
+}
+const mv=(votes,letters)=>letters.reduce((a,l)=>a+(votes[l]||0),0);
+const relCh=(a,b)=> (a!=null&&b!=null&&b>0)? (a-b)/b*100 : null; // שינוי באחוזים, מ-2024 ל-2026
+const fch=v=> v==null? '—' : sgn(v)+'%';
+// תא משולש: כנסת · מוניציפלי · שינוי. שורה עליונה קולות, שורה תחתונה אחוז מכלל המצביעים.
+function metricVals(st,m,mt){ const kv= st? mv(st.by26||{},mt.kl) : null, kt= st? st.a26.v : null; const mvv= (m&&mt.ml.length)? mv(m.votes,mt.ml) : null, mtot= m? m.v : null;
+  const kp= kv!=null&&kt? kv/kt : null, mp= mvv!=null&&mtot? mvv/mtot : null;
+  return {kv,mv:mvv,kp,mp,dAbs:relCh(kv,mvv),dPct:relCh(kp,mp),dPts:dpts(kp,mp)}; }
+function metricCells(x){ return `<td class="n gs">${fmt(x.kv)}<div class="sub">${pc(x.kp)}</div></td><td class="n">${fmt(x.mv)}<div class="sub">${pc(x.mp)}</div></td><td class="n d ${cls(x.dAbs)}" title="${x.dPts!=null?'בנקודות האחוז: '+sgn(x.dPts):''}">${fch(x.dAbs)}<div class="sub ${cls(x.dPct)}">${fch(x.dPct)}</div></td>`; }
+function pearson(pairs){ const n=pairs.length; if(n<5) return null; const ax=pairs.reduce((a,p)=>a+p[0],0)/n, ay=pairs.reduce((a,p)=>a+p[1],0)/n; let sxy=0,sxx=0,syy=0; pairs.forEach(([x,y])=>{ sxy+=(x-ax)*(y-ay); sxx+=(x-ax)**2; syy+=(y-ay)**2; }); return (sxx&&syy)? sxy/Math.sqrt(sxx*syy) : null; }
+function muniRows(mu,city){ const rows=city.places.filter(p=>p.name).map(p=>({name:p.name, st:stats(p.boxes26,[]), m:mu.places[p.name]||null})); return rows; }
+const pelegLetters=mu=>muniGroups(mu).filter(g=>g[0]==='בני תורה (פלג)').flatMap(g=>g[1]);
+function placePairs(rows,peleg){ return rows.filter(r=>r.st&&r.m&&r.st.a26.v&&r.m.v).map(r=>[mv(r.st.by26||{},['נר'])/r.st.a26.v, mv(r.m.votes,peleg)/r.m.v]); }
+
+async function nerOverview(){
+  const codes=Object.keys(MU).filter(c=>IDX[c]&&pelegLetters(MU[c]).length);
+  const rows=[]; for(const c of codes){ const mu=MU[c], city=await getLoc(c), peleg=pelegLetters(mu); const rr=muniRows(mu,city); const st=stats(city.places.flatMap(p=>p.boxes26),[]); rows.push({c,name:mu.name,x:metricVals(st,{votes:mu.tot.votes,v:mu.tot.v},{kl:['נר'],ml:peleg}),r:pearson(placePairs(rr,peleg)),n:placePairs(rr,peleg).length,kk:st.a26.v,mk:mu.tot.v}); }
+  setTimeout(()=>{ const t=$('#ttl'); if(t) t.textContent='צבע שחור 2026 מול עץ 2024'; const b=$('#bigbox'); if(b) b.innerHTML=''; },0);
+  const sumK=rows.reduce((a,r)=>a+r.x.kv,0), sumM=rows.reduce((a,r)=>a+r.x.mv,0), sumKt=rows.reduce((a,r)=>a+r.kk,0), sumMt=rows.reduce((a,r)=>a+r.mk,0);
+  const nat=Object.values(IDX).reduce((a,v)=>a+(v.a26.votes['נר']||0),0);
+  const tot={kv:sumK,mv:sumM,kp:sumKt?sumK/sumKt:null,mp:sumMt?sumM/sumMt:null}; tot.dAbs=relCh(tot.kv,tot.mv); tot.dPct=relCh(tot.kp,tot.mp); tot.dPts=dpts(tot.kp,tot.mp);
+  let h=`<div class="note" style="margin:0 0 8px">הערים שבהן רצה ב-2024 רשימה שסווגה כבני תורה (הפלג). קולות, ומתחתיהם אחוז מכלל המצביעים. מתאם: עד כמה חלק צבע שחור וחלק עץ הולכים יחד בין מקומות הקלפי של אותה עיר (1 = זהה בכיוון, 0 = אין קשר).</div>`;
+  h+=`<div class="tools"><button id="csv">הורד CSV</button></div><div class="card" style="padding:10px 12px"><div class="tw"><table class="px num"><tr><th>עיר</th><th class="n">צבע שחור<br>כנסת 2026</th><th class="n">עץ<br>מוני׳ 2024</th><th class="n">שינוי</th><th class="n">מתאם בין<br>מקומות קלפי</th><th class="n">מספר מקומות</th></tr>`;
+  MUCSV=[['עיר','צבע שחור קולות','עץ קולות','שינוי בקולות %','צבע שחור % מהמצביעים','עץ % מהמצביעים','שינוי באחוז %','מתאם','מקומות']];
+  rows.sort((a,b)=>b.x.kv-a.x.kv).forEach(r=>{ h+=`<tr data-mgo="${r.c}" style="cursor:pointer" title="לפתיחת העיר"><td class="name">${esc(r.name)}</td>${metricCells(r.x)}<td class="n">${r.r==null?'—':r.r.toFixed(2)}</td><td class="n">${r.n}</td></tr>`; MUCSV.push([r.name,r.x.kv,r.x.mv,r.x.dAbs?.toFixed(1),(r.x.kp*100).toFixed(2),(r.x.mp*100).toFixed(2),r.x.dPct?.toFixed(1),r.r?.toFixed(3),r.n]); });
+  h+=`<tr class="tot"><td>סה"כ הערים האלה</td>${metricCells(tot)}<td class="n">—</td><td class="n">—</td></tr></table></div></div>`;
+  h+=`<div class="note">צבע שחור בכל הארץ: ${fmt(nat)} קולות, מתוכם ${fmt(sumK)} בערים שבטבלה ו-${fmt(nat-sumK)} במקומות אחרים (שם לא רצה עץ).</div>`;
+  return h;
+}
+async function muniView(){
+  if(!MU) return `<p class="empty">טוען נתונים מוניציפליים…</p>`;
+  if(ST.mcity==='ner') return nerOverview();
+  const code=ST.mcity; const mu=MU[code]; const city=await getLoc(code);
+  const groups=muniGroups(mu);
+  const lettersOf=b=>(groups.find(g=>g[0]===b)||[null,[]])[1];
+  const utjL=[...lettersOf('יהדות התורה (דגל+אגודה)'),...lettersOf('דגל התורה'),...lettersOf('אגודת ישראל')];
+  const shasL=lettersOf('ש"ס'), jointL=lettersOf('משותפת: יהדות התורה + ש"ס'), pelegL=lettersOf('בני תורה (פלג)');
+  const joint=jointL.length>0;
+  const allL=groups.flatMap(g=>g[1]); // סה"כ חרדי: כולל בני תורה וחרדי כללי
+  const totKL=['ג','שס',...(ST.mzach?['זך']:[]),...(ST.mner?['נר']:[])];
+  const totSub='ג + שס'+(ST.mzach?' + הציבור החרדי':'')+(ST.mner?' + צבע שחור':'')+' מול כל הרשימות החרדיות';
+  const metrics=[...(joint? [{t:'יהדות התורה + ש"ס',sub:'מול המשותפת',kl:['ג','שס'],ml:[...jointL,...utjL,...shasL]}] : [{t:'יהדות התורה',sub:'מול דגל + אגודה',kl:['ג'],ml:utjL},{t:'ש"ס',sub:'מול ש"ס המקומית',kl:['שס'],ml:shasL}]),
+    {t:'סה"כ חרדי',sub:totSub,kl:totKL,ml:allL},{t:'צבע שחור',sub:pelegL.length?'מול עץ (הפלג)':'לא רצה עץ בעיר',kl:['נר'],ml:pelegL},{t:'הציבור החרדי',sub:'כנסת בלבד',kl:['זך'],ml:[]}];
+  const rows=muniRows(mu,city);
+  const extra=[]; if(mu.special&&mu.special.v) extra.push({name:'קלפיות מיוחדות (חיילים, בתי חולים, מעצר) · ללא כתובת', st:null, m:mu.special, un:true});
+  if(mu.unmatched.length){ const agg={boxes:mu.unmatched.map(u=>u.box), e:0,v:0,k:0,votes:{}}; mu.unmatched.forEach(u=>{ agg.e+=u.e; agg.v+=u.v; agg.k+=u.k; Object.entries(u.votes).forEach(([l,n])=>agg.votes[l]=(agg.votes[l]||0)+n); }); extra.push({name:'קלפיות מוניציפליות שלא שויכו למקום קלפי של הכנסת', st:null, m:agg, un:true}); }
+  const totK=stats(city.places.flatMap(p=>p.boxes26),[]), totM=mu.tot, totRow={st:totK,m:totM};
+  setTimeout(()=>{ const t=$('#ttl'); if(t) t.textContent=mu.name+' · כנסת 2026 מול מוניציפלי 2024'; const b=$('#bigbox'); if(b) b.innerHTML=''; },0);
+  let h=`<div class="strip num"><div><div class="v">${pc(totK.a26.e?totK.a26.v/totK.a26.e:null)} <small>מוני׳: ${pc(totM.e?totM.v/totM.e:null)}</small></div><div class="l">אחוז הצבעה כנסת · מוניציפלי</div></div>`;
+  metrics.filter(m=>m.ml.length).forEach(mt=>{ const x=metricVals(totK,totM,mt); h+=`<div><div class="v">${fmt(x.kv)} <small>מוני׳: ${fmt(x.mv)}</small></div><div class="l">${esc(mt.t)} · קולות ${fch(x.dAbs)}<br>אחוז ${pc(x.kp)} מול ${pc(x.mp)} · ${fch(x.dPct)}</div></div>`; });
+  h+=`</div>`;
+  // מקרא
+  h+=`<div class="card" style="padding:10px 14px;margin-bottom:12px"><div class="k" style="margin-bottom:6px">הרשימות המקומיות ב-${esc(mu.name)} (אות, רשימה, סיווג)</div><div class="chips2">${Object.entries(mu.lists).map(([l,x])=>`<span title="${esc(x.name)}"><b>${esc(l)}</b> ${esc(x.name.length>34?x.name.slice(0,32)+'…':x.name)}${x.bloc?` · <i style="color:var(--ink3)">${esc(x.bloc)}</i>`:''}</span>`).join('')}</div>
+    <div class="chart-note" style="margin-top:6px">בכל תא: מספר הקולות, ומתחתיו האחוז מכלל המצביעים. בעמודת השינוי (מ-2024 ל-2026): למעלה השינוי באחוזים במספר הקולות, למטה השינוי באחוזים של האחוז, למשל מ-50% ל-40% זו ירידה של 20%. סה"כ העיר כולל את הקלפיות המיוחדות, כמו בפרסום הרשמי. שיוך הקלפיות לפי הכתובת הרשמית.</div></div>`;
+  if(pelegL.length){ const pp=placePairs(rows,pelegL), r=pearson(pp); h+=`<div class="note" style="margin:0 0 8px">צבע שחור מול עץ ב-${esc(mu.name)}: ${r==null?'מעט מדי מקומות לחישוב מתאם':'מתאם '+r.toFixed(2)+' בין '+pp.length+' מקומות קלפי'} (1 = זהה בכיוון, 0 = אין קשר).</div>`; }
+  // טבלה
+  const head1=`<tr><th rowspan="2">מקום הקלפי (כנסת 2026)</th><th class="n" rowspan="2">קלפיות<br>כנסת / מוני׳</th><th class="n" rowspan="2">הצבעה<br>כנסת / מוני׳</th>${metrics.map(mt=>`<th class="grp" colspan="3">${esc(mt.t)}<div class="sub">${esc(mt.sub)}</div></th>`).join('')}${groups.map(g=>`<th class="n" rowspan="2">${esc(BLOCS.find(b=>b[0]===g[0])?.[1]||g[0])}<br><small>${esc(g[1].join(', '))}</small></th>`).join('')}</tr>`;
+  const head2=`<tr>${metrics.map(()=>`<th class="n">כנסת</th><th class="n">מוני׳</th><th class="n">שינוי</th>`).join('')}</tr>`;
+  const line=(r,tot)=>{ const st=r.st, m=r.m; const tK=st&&st.a26.e?st.a26.v/st.a26.e:null, tM=m&&m.e?m.v/m.e:null;
+    let c=`<td class="name">${esc(r.name)}${m&&!r.un&&!tot&&m.boxes?`<div class="sub">מוני׳: קלפיות ${esc(m.boxes.join(', '))}</div>`:(r.un||tot?'':'<div class="sub">אין קלפי מוניציפלית בכתובת הזו</div>')}</td><td class="n">${st?st.a26.n:'—'} / ${tot?'':(m&&m.boxes?m.boxes.length:'—')}</td><td class="n">${pc(tK)}<div class="sub">${pc(tM)}</div></td>`;
+    metrics.forEach(mt=>{ c+=metricCells(metricVals(st,m,mt)); });
+    c+=groups.map(g=>`<td class="n">${m?fmt(mv(m.votes,g[1])):'—'}<div class="sub">${m&&m.v?pc(mv(m.votes,g[1])/m.v):'—'}</div></td>`).join('');
+    return `<tr class="${tot?'tot':''}">${c}</tr>`; };
+  const sortOpts=[['name','לפי שם'],['size','לפי גודל'],...metrics.filter(m=>m.ml.length).map((m,i)=>['m'+metrics.indexOf(m),'לפי השינוי בקולות · '+m.t])];
+  const sv=r=>{ if(SORT==='size') return -(r.st?r.st.a26.e:0); const mm=/^m(\d+)$/.exec(SORT); if(mm&&metrics[+mm[1]]){ const d=metricVals(r.st,r.m,metrics[+mm[1]]).dAbs; return d==null?1e9:-d; } return r.name; };
+  h+=`<div class="tools"><span>מיון:</span><select id="sort">${sortOpts.map(([v,t])=>`<option value="${v}" ${SORT===v?'selected':''}>${t}</option>`).join('')}</select><button id="csv">הורד CSV</button></div>`;
+  h+=`<div class="card" style="padding:10px 12px"><div class="tw"><table class="px num">${head1}${head2}`;
+  srt(rows,sv).forEach(r=>{ h+=line(r,false); });
+  extra.forEach(r=>{ h+=line(r,false); });
+  h+=line({name:'סה"כ '+mu.name, st:totK, m:{...totM, boxes:null}},true);
+  h+=`</table></div></div>`;
+  MUCSV=[['מקום',...metrics.flatMap(mt=>[mt.t+' כנסת קולות',mt.t+' מוני׳ קולות',mt.t+' שינוי קולות %',mt.t+' כנסת % מצביעים',mt.t+' מוני׳ % מצביעים',mt.t+' שינוי אחוז %']),...groups.map(g=>g[0]+' קולות')]];
+  [...srt(rows,sv),...extra,{name:'סה"כ '+mu.name,st:totK,m:totM}].forEach(r=>{ MUCSV.push([r.name,...metrics.flatMap(mt=>{ const x=metricVals(r.st,r.m,mt); return [x.kv,x.mv,x.dAbs?.toFixed(1),x.kp==null?'':(x.kp*100).toFixed(2),x.mp==null?'':(x.mp*100).toFixed(2),x.dPct?.toFixed(1)]; }),...groups.map(g=>r.m?mv(r.m.votes,g[1]):'')]); });
+  return h;
+}
+
 /* ---------- מפה ---------- */
 let PTS=null, MAP=null, POLY=[], POLYL=null, DRAW=false, MAPM='dutj', MAPPL=[];
 const METRICS=[['dutj','שינוי יהדות התורה (נק׳)'],['dshas','שינוי ש"ס (נק׳)'],['dcombo','שינוי עוצמה + ציונות דתית (נק׳)'],['dlikud','שינוי הליכוד (נק׳)'],['dturn','שינוי אחוז הצבעה (נק׳)'],['utj','אחוז יהדות התורה'],['shas','אחוז ש"ס'],['turn','אחוז הצבעה']];
@@ -463,12 +555,14 @@ function detail(p){
   return `<div class="det"><div>${bx(p.boxes26,'2026')}${p.boxes22.length?bx(p.boxes22,'2022'):''}</div><div>${flowPanel(st,p.name||p.name22,'שינוי במספר הקולות במקום הזה, 2026 פחות 2022.')}</div></div>`;
 }
 function downloadCSV(){
+  if(ST.mode==='muni'&&MUCSV.length){ const t='\ufeff'+MUCSV.map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'text/csv;charset=utf-8'})); a.download='kalpiot_muni.csv'; a.click(); return; }
   const H=['יישוב','מקום / קלפי 2026','מקום 2022','בז"ב 2026','מצביעים 2026','כשרים 2026','בז"ב 2022','מצביעים 2022','כשרים 2022','יהדות התורה 2026','יהדות התורה 2022','ש"ס 2026','ש"ס 2022','עוצמה+ציונות 2026','ט 2022','ליכוד 2026','ליכוד 2022','הציבור החרדי 2026','צבע שחור 2026'];
   const L=CSVROWS.map(([city,n,n22,s])=>[city,n,n22,s.a26.e,s.a26.v,s.a26.k,s.a22.e,s.a22.v,s.a22.k,s.lists.utj.v26,s.lists.utj.v22??'',s.lists.shas.v26,s.lists.shas.v22??'',s.combo.v26,s.combo.v22,s.lists.likud.v26,s.lists.likud.v22??'',s.lists.zach.v26,s.lists.ner.v26]);
   const csv='\ufeff'+[H,...L].map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='kalpiot.csv'; a.click();
 }
-let NB=null;
+let NB=null, MU=null;
+fetchJSON('live/muni2024.json').then(d=>{ MU=d; if(IDX&&ST.mode==='muni') render(); }).catch(()=>{ MU={}; });
 fetchJSON('live/place_nbhd.json').then(d=>{ NB=d; if(IDX&&ST.mode==='nbhd') render(); }).catch(()=>{ NB={}; });
 fetchJSON('live/loc_index.json').then(d=>{ IDX=d; if(!IDX[ST.city]) ST.city='3780'; render(); }).catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; });
 </script>
