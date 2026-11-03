@@ -271,14 +271,15 @@ function controls(){
   if(ST.mode==='muni'){ const cities=Object.keys(MU||{}).filter(c=>IDX[c]); if(ST.mcity!=='ner'&&!cities.includes(ST.mcity)) ST.mcity=cities.includes('3780')?'3780':cities[0];
     h+=`<label>עיר</label><div><select id="mcity"><option value="ner" ${ST.mcity==='ner'?'selected':''}>כל הערים · צבע שחור מול עץ</option>${cities.sort((a,b)=>IDX[a].name.localeCompare(IDX[b].name,'he')).map(c=>`<option value="${c}" ${c===ST.mcity?'selected':''}>${esc(IDX[c].name)}</option>`).join('')}</select></div>`;
     if(ST.mcity!=='ner') h+=`<label>סה"כ חרדי בכנסת</label><div class="chips2"><label style="cursor:pointer"><input type="checkbox" id="mzach" ${ST.mzach?'checked':''}> כולל הציבור החרדי</label><label style="cursor:pointer"><input type="checkbox" id="mner" ${ST.mner?'checked':''}> כולל צבע שחור</label></div>`; }
-  if(ST.mode==='map') h+=`<label>יישוב</label><div><input type="text" id="pick" list="locs" placeholder="הקלד שם יישוב…" value="${esc(IDX[ST.city]?.name||'')}"><datalist id="locs">${opts}</datalist></div>`;
+  if(ST.mode==='map') h+=`<label>יישוב</label><div class="mapbar" style="margin:0"><input type="text" id="pick" list="locs" placeholder="הקלד שם יישוב…" value="${esc(ST.mapAll?'כל הארץ':(IDX[ST.city]?.name||''))}" onfocus="this.select()"><datalist id="locs"><option value="כל הארץ">${opts}</datalist><button id="mapAllBtn" class="${ST.mapAll?'on':''}">כל הארץ</button></div>`;
   if(ST.mode==='district') h+=`<label>מחוז</label><div><select id="dist">${DISTRICTS.map(d=>`<option ${d===ST.district?'selected':''}>${d}</option>`).join('')}</select></div>`;
   h+=`</div>`;
   return h;
 }
 function bind(){
   document.querySelectorAll('#mode button').forEach(b=>b.onclick=()=>{ ST.mode=b.dataset.m; save(); render(); });
-  const pick=$('#pick'); if(pick){ const go=()=>{ const m=/\((\d+)\)\s*$/.exec(pick.value); let code=m?m[1]:null; if(!code){ const e=Object.entries(IDX).find(([c,x])=>x.name===pick.value.trim()); code=e&&e[0]; } if(!code) return; if(ST.mode==='city'||ST.mode==='map'){ ST.city=code; POLY=[]; } else { if(!ST.group.includes(code)) ST.group.push(code); pick.value=''; } OPEN.clear(); save(); render(); }; pick.addEventListener('change',go); pick.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } }); }
+  const mab=$('#mapAllBtn'); if(mab) mab.onclick=()=>{ if(ST.mapAll) return; ST.mapAll=true; POLY=[]; DRAW=false; save(); render(); };
+  const pick=$('#pick'); if(pick){ const go=()=>{ if(ST.mode==='map'&&pick.value.trim()==='כל הארץ'){ if(!ST.mapAll){ ST.mapAll=true; POLY=[]; DRAW=false; save(); render(); } return; } const m=/\((\d+)\)\s*$/.exec(pick.value); let code=m?m[1]:null; if(!code){ const e=Object.entries(IDX).find(([c,x])=>x.name===pick.value.trim()); code=e&&e[0]; } if(!code) return; if(ST.mode==='city'||ST.mode==='map'){ ST.city=code; POLY=[]; if(ST.mode==='map'){ ST.mapAll=false; DRAW=false; ST.mapFor=null; } } else { if(!ST.group.includes(code)) ST.group.push(code); pick.value=''; } OPEN.clear(); save(); render(); }; pick.addEventListener('change',go); pick.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } }); }
   const f=$('#find'); if(f){ let t; f.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{ FIND=f.value.trim(); OPEN.clear(); render().then(()=>{ const g=$('#find'); if(g){ g.focus(); g.setSelectionRange(g.value.length,g.value.length); } }); },350); }; }
   document.querySelectorAll('#gchips b').forEach(b=>b.onclick=()=>{ ST.group=ST.group.filter(c=>c!==b.dataset.c); save(); render(); });
   const sp=$('#sumParty'); if(sp) sp.onchange=()=>{ ST.sumParty=sp.value; save(); render(); };
@@ -335,7 +336,7 @@ async function cityView(code){
     h+=tools(sortOpts);
     h+=`<div class="card" style="padding:10px 12px"><div class="tw"><table class="px num"><tr><th>מקום הקלפי</th><th class="n">קלפיות<br>26 / 22</th>${HEADS}</tr>`;
     srt(places,p=>sortKey(p.st,p.name||'\uffff')).forEach(p=>{ const k=p.name||('old:'+p.name22); const isOpen=OPEN.has(k);
-      const nm= p.name? esc(p.name)+(p.name22?'':'<span class="tag new">חדש ב-2026</span>') : esc(p.name22)+'<span class="tag">לא פעיל ב-2026</span>';
+      const nm= p.name? esc(p.name)+(p.name22?'':'<span class="tag new">בלי מקביל ב-2022</span>') : esc(p.name22)+'<span class="tag">בלי מקביל ב-2026</span>';
       const sub= p.name&&p.name22&&p.name22!==p.name? `<div class="sub">2022: ${esc(p.name22)}</div>` : '';
       h+=`<tr class="pl ${isOpen?'open':''}" data-k="${esc(k)}"><td class="name">${nm}${sub}</td><td class="n">${p.st.a26.n} / ${p.st.a22.n}</td>${cells(p.st)}</tr>`;
       if(isOpen) h+=`<tr class="detail"><td colspan="13">${detail(p)}</td></tr>`;
@@ -415,7 +416,7 @@ async function sumDetail(r,party,code1){ const places=[]; for(const c of sumCode
   const links=single? `<div class="tools" style="margin-top:8px"><button data-gm="city" data-gc="${single}">כל הקלפיות</button>${NB&&NB[single]?`<button data-gm="nbhd" data-gc="${single}">שכונות</button>`:''}${MU&&MU[single]?`<button data-gm="muni" data-gc="${single}">מול מוניציפלי 2024</button>`:''}</div>`:'';
   return `<div class="det"><div><h4>המפלגות הגדולות ב-2026</h4><table class="bx num"><tr><th>מפלגה</th><th class="n">קולות</th><th class="n">% מהכשרים</th></tr>${top.map(([l,v])=>`<tr><td>${esc(PNAMES[l]||l)}</td><td class="n">${fmt(v)}</td><td class="n">${pc(r.a26.k?v/r.a26.k:null)}</td></tr>`).join('')}</table>${gap}<div class="chart-note">אחוז הצבעה: ${pc(t26)} (2022: ${pc(t22)}).</div>${nbh}</div>
     <div><h4>העליות הגדולות · ${esc(party.t)}</h4>${ups.length?tbl(ups):'<div class="chart-note">אין.</div>'}<h4>הירידות הגדולות</h4>${downs.length?tbl(downs):'<div class="chart-note">אין.</div>'}
-    <div class="chart-note">ההשוואה לפי מקומות קלפי שהותאמו בין השנים (${rows.length}). מחוץ לה: ${fmt(v26n)} קולות ב-${new26.length} מקומות חדשים של 2026, ו-${fmt(v22o)} קולות ב-${old22.length} מקומות של 2022 שלא פעלו ב-2026. הם כלולים בסה"כ העיר.</div>${links}</div></div>`;
+    <div class="chart-note">ההשוואה לפי מקומות קלפי שהותאמו בין השנים (${rows.length}). מחוץ לה: ${fmt(v26n)} קולות ב-${new26.length} מקומות של 2026 בלי מקביל ב-2022, ו-${fmt(v22o)} קולות ב-${old22.length} מקומות של 2022 בלי מקביל ב-2026. הם כלולים בסה"כ העיר.</div>${links}</div></div>`;
 }
 async function sumView(){
   const party=SUMP.find(x=>x.id===ST.sumParty)||SUMP[0]; const nat=sumAgg2(Object.keys(IDX)); const n26=lv(nat.a26.votes,party.l26), n22=lv(nat.a22.votes,party.l22), natD=n26-n22;
@@ -452,7 +453,7 @@ async function nbhdView(){
   const groups={}; places.forEach(p=>(groups[p.nb]=groups[p.nb]||[]).push(p));
   const shown=Object.keys(groups).filter(n=>!sel.length||sel.includes(n)).sort((a,b)=>a.localeCompare(b,'he'));
   const selPlaces=shown.flatMap(n=>groups[n]);
-  const inactive=sel.length?[]:city.places.filter(p=>!p.name); // מקומות 2022 שלא פעלו ב-2026: נספרים בסה"כ העיר
+  const inactive=sel.length?[]:city.places.filter(p=>!p.name); // מקומות 2022 בלי מקביל ב-2026: נספרים בסה"כ העיר
   const tot=stats(selPlaces.flatMap(p=>p.boxes26), [...selPlaces,...inactive].flatMap(p=>p.boxes22));
   const title= sel.length? (sel.length===1? sel[0] : sel.length+' שכונות') : city.name;
   setTimeout(()=>{ const t=$('#ttl'); if(t) t.textContent=city.name+' · '+(sel.length?title:'לפי שכונות'); const b=$('#bigbox'); if(b) b.innerHTML=`<div class="v">${pc(tot.lists.utj.s26)}</div><div class="l">יהדות התורה · 2022: ${pc(tot.lists.utj.s22)}</div>`; },0);
@@ -467,9 +468,9 @@ async function nbhdView(){
     h+=`<tr class="pl ${isOpen?'open':''}" data-k="${esc(k)}"><td class="name">${esc(r.n)}<div class="sub">${r.pl.length} מקומות קלפי</div></td><td class="n">${r.st.a26.n} / ${r.st.a22.n}</td>${cells(r.st)}</tr>`;
     CSVROWS.push([city.name,'שכונה: '+r.n,'',r.st]);
     if(isOpen){ h+=`<tr class="detail"><td colspan="13"><div class="tw"><table class="px num"><tr><th>מקום הקלפי</th><th class="n">קלפיות<br>26 / 22</th>${HEADS}</tr>`;
-      srt(r.pl,p=>sortKey(p.st,p.name)).forEach(p=>{ h+=`<tr><td class="name">${esc(p.name)}${p.name22&&p.name22!==p.name?`<div class="sub">2022: ${esc(p.name22)}</div>`:''}${p.name22?'':'<span class="tag new">חדש ב-2026</span>'}</td><td class="n">${p.st.a26.n} / ${p.st.a22.n}</td>${cells(p.st)}</tr>`; CSVROWS.push([city.name,p.name,p.name22||'',p.st]); });
+      srt(r.pl,p=>sortKey(p.st,p.name)).forEach(p=>{ h+=`<tr><td class="name">${esc(p.name)}${p.name22&&p.name22!==p.name?`<div class="sub">2022: ${esc(p.name22)}</div>`:''}${p.name22?'':'<span class="tag new">בלי מקביל ב-2022</span>'}</td><td class="n">${p.st.a26.n} / ${p.st.a22.n}</td>${cells(p.st)}</tr>`; CSVROWS.push([city.name,p.name,p.name22||'',p.st]); });
       h+=`</table></div><div style="margin-top:8px">${flowPanel(r.st,r.n,'שינוי במספר הקולות בשכונה, 2026 פחות 2022.')}</div></td></tr>`; } });
-  if(inactive.length){ const ist=stats([],inactive.flatMap(p=>p.boxes22)); h+=`<tr><td class="name">מקומות קלפי של 2022 שלא פעלו ב-2026<div class="sub">${inactive.length} מקומות, ללא שיוך לשכונה</div></td><td class="n">0 / ${ist.a22.n}</td>${cells(ist)}</tr>`; }
+  if(inactive.length){ const ist=stats([],inactive.flatMap(p=>p.boxes22)); h+=`<tr><td class="name">מקומות קלפי של 2022 בלי מקביל ב-2026<div class="sub">${inactive.length} מקומות, ללא שיוך לשכונה</div></td><td class="n">0 / ${ist.a22.n}</td>${cells(ist)}</tr>`; }
   h+=`<tr class="tot"><td>סה"כ ${esc(title)}</td><td class="n">${tot.a26.n} / ${tot.a22.n}</td>${cells(tot)}</tr></table></div></div>`;
   return h;
 }
@@ -557,7 +558,7 @@ async function muniView(){
 }
 
 /* ---------- מפה ---------- */
-let PTS=null, MAP=null, POLY=[], POLYL=null, DRAW=false, MAPM='dutj', MAPPL=[], MAPOLD=[];
+let PTS=null, MAP=null, POLY=[], POLYL=null, DRAW=false, MAPM='dutj', MAPPL=[], MAPOLD=[], MAPALL=null, MAPALLPL=null;
 const METRICS=[['dutj','שינוי יהדות התורה (נק׳)'],['dshas','שינוי ש"ס (נק׳)'],['dcombo','שינוי עוצמה + ציונות דתית (נק׳)'],['dlikud','שינוי הליכוד (נק׳)'],['dturn','שינוי אחוז הצבעה (נק׳)'],['utj','אחוז יהדות התורה'],['shas','אחוז ש"ס'],['turn','אחוז הצבעה']];
 function metric(st){ const t26=st.a26.e?st.a26.v/st.a26.e:null, t22=st.a22.e?st.a22.v/st.a22.e:null;
   switch(MAPM){ case 'dutj': return dpts(st.lists.utj.s26,st.lists.utj.s22); case 'dshas': return dpts(st.lists.shas.s26,st.lists.shas.s22); case 'dcombo': return dpts(st.combo.s26,st.combo.s22); case 'dlikud': return dpts(st.lists.likud.s26,st.lists.likud.s22); case 'dturn': return dpts(t26,t22);
@@ -565,43 +566,61 @@ function metric(st){ const t26=st.a26.e?st.a26.v/st.a26.e:null, t22=st.a22.e?st.
 function mcolor(v){ if(v==null) return '#b9b2a2'; if(MAPM[0]==='d'){ const t=Math.max(-1,Math.min(1,v/8)); return t>=0? `rgba(19,111,115,${(0.25+0.75*t).toFixed(2)})` : `rgba(184,92,58,${(0.25+0.75*-t).toFixed(2)})`; } const t=Math.max(0,Math.min(1,v/ (MAPM==='turn'?100:60))); return `rgba(125,100,72,${(0.2+0.8*t).toFixed(2)})`; }
 function inPoly(pt,poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [yi,xi]=poly[i],[yj,xj]=poly[j]; if(((yi>pt[0])!==(yj>pt[0])) && (pt[1] < (xj-xi)*(pt[0]-yi)/(yj-yi)+xi)) c=!c; } return c; }
 async function mapView(code){
-  if(!PTS) PTS=await fetchJSON('live/points.json');
-  const city=await getLoc(code); const pts=PTS[code]||{};
-  MAPPL=city.places.filter(p=>p.name).map(p=>({...p, st:stats(p.boxes26,p.boxes22), pt:pts[p.name]||null}));
-  MAPOLD=city.places.filter(p=>!p.name);
+  let cityName;
+  if(ST.mapAll){ if(!MAPALL) MAPALL=await fetchJSON('live/map_all.json'); if(!MAPALLPL) MAPALLPL=MAPALL.places.map(p=>({name:p.n,name22:p.n22,boxes26:p.b26,boxes22:p.b22,pt:p.pt,cn:p.cn,whole:!!p.whole,st:stats(p.b26,p.b22)}));
+    MAPPL=MAPALLPL; MAPOLD=[]; cityName='כל הארץ'; }
+  else { if(!PTS) PTS=await fetchJSON('live/points.json');
+    const city=await getLoc(code); const pts=PTS[code]||{};
+    MAPPL=city.places.filter(p=>p.name).map(p=>({...p, st:stats(p.boxes26,p.boxes22), pt:pts[p.name]||null}));
+    MAPOLD=city.places.filter(p=>!p.name); cityName=city.name; }
   const located=MAPPL.filter(p=>p.pt).length;
-  setTimeout(()=>{ const t=$('#ttl'); if(t) t.textContent=city.name+' · מפה'; const b=$('#bigbox'); if(b) b.innerHTML=''; },0);
+  setTimeout(()=>{ const t=$('#ttl'); if(t) t.textContent=cityName+' · מפה'; const b=$('#bigbox'); if(b) b.innerHTML=''; },0);
   let h=`<div class="mapbar"><span>צבע לפי:</span><select id="mapm">${METRICS.map(([v,t])=>`<option value="${v}" ${MAPM===v?'selected':''}>${t}</option>`).join('')}</select>
     <button id="draw" class="${DRAW?'on':''}">${DRAW?'מסמן… לחץ על המפה (סיום בלחיצה על הכפתור)':'סמן שטח'}</button><button id="clearPoly" ${POLY.length?'':'disabled'}>נקה סימון</button>
     <span class="legend">${MAPM[0]==='d'?'<i style="background:rgba(184,92,58,.9)"></i>ירידה <i style="background:rgba(19,111,115,.9)"></i>עלייה':'<i style="background:rgba(125,100,72,.9)"></i>גבוה'} <i style="background:#b9b2a2"></i>אין 2022 · גודל = בז"ב</span></div>`;
-  h+=`<div id="map"></div><div class="hint">${located} מתוך ${MAPPL.length} מקומות קלפי ממוקמים על המפה (מיקום רשמי של ועדת הבחירות). לחיצה על נקודה מציגה את המקום. "סמן שטח": לוחצים נקודות על המפה סביב האזור, ואז שוב על הכפתור לסיום; הסיכום כולל את כל מקומות הקלפי שבתוך השטח.</div>`;
+  const coverage= ST.mapAll? `כל הארץ: ${fmt(located)} נקודות. ביישובים הגדולים נקודה לכל מקום קלפי, וביישובים הקטנים נקודה אחת לכל היישוב. על המפה ${(100*MAPPL.reduce((a,p)=>a+p.st.a26.e,0)/Object.values(IDX).reduce((a,v)=>a+v.a26.e,0)).toFixed(1)}% מבעלי זכות הבחירה; המעטפות החיצוניות אינן על המפה. גוררים ומקרבים חופשי, והמפה נשארת היכן שהיית.` : `${located} מתוך ${MAPPL.length} מקומות קלפי ממוקמים על המפה (מיקום רשמי של ועדת הבחירות).`;
+  h+=`<div id="map"></div><div class="hint">${coverage} לחיצה על נקודה מציגה את המקום. "סמן שטח": לוחצים נקודות על המפה סביב האזור, ואז שוב על הכפתור לסיום; הסיכום כולל את כל מקומות הקלפי שבתוך השטח.</div>`;
   h+=`<div id="mapres"></div>`;
   return h;
 }
 function mapResults(){
+  if(ST.mapAll&&POLY.length<3){ CSVROWS=[]; return `<p class="empty">סמן שטח על המפה כדי לקבל את התוצאות שלו. לסיכום של כל הארץ יש את המסך "תמונת מצב".</p>`; }
   const sel= POLY.length>=3? MAPPL.filter(p=>p.pt&&inPoly(p.pt,POLY)) : MAPPL;
-  const title= POLY.length>=3? `השטח המסומן (${sel.length} מקומות קלפי)` : IDX[ST.city].name;
-  const old=POLY.length>=3? [] : MAPOLD; // בלי סימון שטח: סה"כ העיר כולל מקומות 2022 שלא פעלו ב-2026
+  const title= POLY.length>=3? `השטח המסומן (${sel.length} נקודות)` : IDX[ST.city].name;
+  const plabel=p=> ST.mapAll&&!p.whole? p.cn+' · '+p.name : p.name;
+  const old=POLY.length>=3? [] : MAPOLD; // בלי סימון שטח: סה"כ העיר כולל מקומות 2022 בלי מקביל ב-2026
   const st=stats(sel.flatMap(p=>p.boxes26), [...sel,...old].flatMap(p=>p.boxes22));
   let h=strip(st,`<div><div class="v">${st.a26.n} <small>2022: ${st.a22.n}</small></div><div class="l">קלפיות${POLY.length>=3?' בשטח':''}</div></div>`);
   if(!sel.length) return h+`<p class="empty">אין מקומות קלפי בתוך השטח המסומן.</p>`;
+  if(POLY.length>=3){ const nw=sel.filter(p=>!p.name22); h+=`<div class="note" style="margin:-4px 0 8px">בשטח מסומן נספרים רק מקומות שיש להם מיקום ב-2026, כי למקומות של 2022 בלי מקביל ב-2026 אין מיקום. ${nw.length? nw.length+' מקומות בלי מקביל ב-2022, עם '+fmt(nw.reduce((a,p)=>a+p.st.a26.e,0))+' בעלי זכות בחירה, נספרים רק ב-2026. ':''}לכן השינוי בשטח מסומן הוא קירוב, והסה"כ העירוני המדויק נמצא במסכים האחרים.</div>`; }
   h+=flowCard(st,title);
   h+=`<div class="card" style="padding:10px 12px"><div class="tw"><table class="px num"><tr><th>מקום הקלפי</th><th class="n">קלפיות<br>26 / 22</th>${HEADS}</tr>`;
   CSVROWS=[];
-  srt(sel,p=>sortKey(p.st,p.name)).forEach(p=>{ h+=`<tr><td class="name">${esc(p.name)}${p.pt?`<div class="sub">${esc(p.pt[2]||'')}${p.pt[3]?' · '+esc(p.pt[3]):''}</div>`:'<div class="sub">לא ממוקם</div>'}</td><td class="n">${p.st.a26.n} / ${p.st.a22.n}</td>${cells(p.st)}</tr>`; CSVROWS.push([IDX[ST.city].name,p.name,p.name22||'',p.st]); });
-  if(old.length){ const ist=stats([],old.flatMap(p=>p.boxes22)); h+=`<tr><td class="name">מקומות קלפי של 2022 שלא פעלו ב-2026<div class="sub">${old.length} מקומות, ללא מיקום במפה</div></td><td class="n">0 / ${ist.a22.n}</td>${cells(ist)}</tr>`; }
+  const ordered=srt(sel,p=>sortKey(p.st,plabel(p))); const CAP=300;
+  ordered.slice(0,CAP).forEach(p=>{ h+=`<tr><td class="name">${esc(plabel(p))}${p.pt?`<div class="sub">${esc(p.pt[2]||'')}${p.pt[3]?' · '+esc(p.pt[3]):''}</div>`:'<div class="sub">לא ממוקם</div>'}</td><td class="n">${p.st.a26.n} / ${p.st.a22.n}</td>${cells(p.st)}</tr>`; });
+  ordered.forEach(p=>CSVROWS.push([ST.mapAll?p.cn:IDX[ST.city].name,p.name,p.name22||'',p.st]));
+  if(ordered.length>CAP) h+=`<tr><td class="name" colspan="13">מוצגות ${CAP} שורות מתוך ${fmt(ordered.length)}. הקובץ להורדה כולל את כולן.</td></tr>`;
+  if(old.length){ const ist=stats([],old.flatMap(p=>p.boxes22)); h+=`<tr><td class="name">מקומות קלפי של 2022 בלי מקביל ב-2026<div class="sub">${old.length} מקומות, ללא מיקום במפה</div></td><td class="n">0 / ${ist.a22.n}</td>${cells(ist)}</tr>`; }
   h+=`<tr class="tot"><td>סה"כ ${esc(title)}</td><td class="n">${st.a26.n} / ${st.a22.n}</td>${cells(st)}</tr></table></div><div class="tools" style="margin-top:8px"><button id="csv">הורד CSV</button></div></div>`;
   return h;
 }
 function mountMap(){
   const el=$('#map'); if(!el||typeof L==='undefined') return;
   const located=MAPPL.filter(p=>p.pt);
-  MAP=L.map('map',{zoomControl:true}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(MAP);
-  if(located.length){ MAP.fitBounds(located.map(p=>p.pt.slice(0,2)),{padding:[20,20]}); } else MAP.setView([31.8,35.1],8);
+  try{ if(MAP&&MAP._loaded){ const c0=MAP.getCenter(); ST.mapView={lat:+c0.lat.toFixed(5),lng:+c0.lng.toFixed(5),z:MAP.getZoom()}; } }catch(e){} // התצוגה האחרונה, גם אם גרירה עוד לא הסתיימה
+  try{ if(MAP){ const rr=MAP._renderer; if(rr&&rr._redrawRequest){ L.Util.cancelAnimFrame(rr._redrawRequest); rr._redrawRequest=null; } MAP.remove(); } }catch(e){} POLYL=null;
+  MAP=L.map('map',{zoomControl:true,preferCanvas:!!ST.mapAll}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(MAP);
+  const viewKey=ST.mapAll?'all':ST.city, sv=ST.mapView;
+  if(ST.mapAll||ST.mapFor===viewKey){ if(sv) MAP.setView([sv.lat,sv.lng],sv.z); else MAP.setView([31.6,34.95],8); } // כל הארץ: נשארים היכן שהיינו
+  else if(located.length){ MAP.fitBounds(located.map(p=>p.pt.slice(0,2)),{padding:[20,20]}); } else MAP.setView([31.8,35.1],8);
+  ST.mapFor=viewKey;
+  MAP.on('moveend dragend zoomend',()=>{ const c=MAP.getCenter(); ST.mapView={lat:+c.lat.toFixed(5),lng:+c.lng.toFixed(5),z:MAP.getZoom()}; ST.mapFor=viewKey; save(); });
+  { const c=MAP.getCenter(); ST.mapView={lat:+c.lat.toFixed(5),lng:+c.lng.toFixed(5),z:MAP.getZoom()}; save(); }
   const mx=Math.max(1,...located.map(p=>p.st.a26.e));
   located.forEach(p=>{ const v=metric(p.st); const t26=p.st.a26.e?p.st.a26.v/p.st.a26.e:null;
-    const m=L.circleMarker(p.pt.slice(0,2),{radius:6+14*Math.sqrt(p.st.a26.e/mx),color:'#2a2722',weight:1,fillColor:mcolor(v),fillOpacity:1}).addTo(MAP);
-    m.bindPopup(`<b>${esc(p.name)}</b><br>${esc(p.pt[2]||'')}${p.pt[3]?' · '+esc(p.pt[3]):''}<br>קלפיות ${p.boxes26.map(b=>b.box).join(', ')} · בז"ב ${fmt(p.st.a26.e)}<br>הצבעה ${pc(t26)} · יהדות התורה ${pc(p.st.lists.utj.s26)} (${sgn(dpts(p.st.lists.utj.s26,p.st.lists.utj.s22))}) · ש"ס ${pc(p.st.lists.shas.s26)} (${sgn(dpts(p.st.lists.shas.s26,p.st.lists.shas.s22))})<br>${METRICS.find(x=>x[0]===MAPM)[1]}: <b>${v==null?'—':(MAPM[0]==='d'?sgn(v):v.toFixed(1)+'%')}</b>`);
+    const m=L.circleMarker(p.pt.slice(0,2),{radius:ST.mapAll? 2.5+9*Math.sqrt(p.st.a26.e/mx) : 6+14*Math.sqrt(p.st.a26.e/mx),color:'#2a2722',weight:ST.mapAll?.5:1,fillColor:mcolor(v),fillOpacity:1}).addTo(MAP);
+    m.on('popupopen',()=>{ if(DRAW) m.closePopup(); }); // בזמן סימון שטח לחיצה על נקודה לא פותחת חלון
+    m.bindPopup(()=>`<b>${esc(p.cn&&!p.whole?p.cn+' · '+p.name:p.name)}</b>${p.whole?'<br>כל היישוב':''}<br>${esc(p.pt[2]||'')}${p.pt[3]?' · '+esc(p.pt[3]):''}<br>קלפיות ${p.boxes26.length>12?p.boxes26.length:p.boxes26.map(b=>b.box).join(', ')} · בז"ב ${fmt(p.st.a26.e)}<br>הצבעה ${pc(t26)} · יהדות התורה ${pc(p.st.lists.utj.s26)} (${sgn(dpts(p.st.lists.utj.s26,p.st.lists.utj.s22))}) · ש"ס ${pc(p.st.lists.shas.s26)} (${sgn(dpts(p.st.lists.shas.s26,p.st.lists.shas.s22))})<br>${METRICS.find(x=>x[0]===MAPM)[1]}: <b>${v==null?'—':(MAPM[0]==='d'?sgn(v):v.toFixed(1)+'%')}</b>`);
   });
   const redraw=()=>{ if(POLYL){ MAP.removeLayer(POLYL); POLYL=null; } if(POLY.length) POLYL=(POLY.length>=3?L.polygon(POLY,{color:'#8c3a2b',weight:2,fillOpacity:.08}):L.polyline(POLY,{color:'#8c3a2b',weight:2,dashArray:'4 4'})).addTo(MAP); const r=$('#mapres'); if(r){ r.innerHTML=mapResults(); const cs=$('#csv'); if(cs) cs.onclick=downloadCSV; } const c=$('#clearPoly'); if(c) c.disabled=!POLY.length; };
   MAP.on('click',e=>{ if(!DRAW) return; POLY.push([e.latlng.lat,e.latlng.lng]); redraw(); });
