@@ -114,6 +114,7 @@ tr.det td{background:#fbfaf6;white-space:normal;text-align:right;position:static
 #map{height:60vh;min-height:360px;border-radius:var(--r);border:1px solid var(--line);background:#ece9e1;margin-bottom:8px}
 .leaflet-container{font-family:inherit;font-size:13px}
 .leaflet-popup-content{margin:10px 12px;direction:rtl;text-align:right;line-height:1.5;min-width:200px}
+.leaflet-popup-content .pp{margin-top:6px} .leaflet-popup-content .pb{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap} .leaflet-popup-content .pb .btn{font-size:13px;padding:4px 10px}
 .mapbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .mapbar select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;background:#fff}
 .ml{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink2);margin:0 0 6px}
@@ -173,6 +174,7 @@ const arr=d=>!ok(d)||d===0?'':d>0?'<i class="ar up">▲</i>':'<i class="ar dn">�
 const updn=(d,u,w)=>d>=0?u:w;
 async function fetchJSON(u,tries=2){ const ac=new AbortController(); const tm=setTimeout(()=>ac.abort(),40000); try{ const r=await fetch(u+'?t='+Date.now(),{cache:'no-store',signal:ac.signal}); if(!r.ok) throw new Error(r.status); return await r.json(); }catch(e){ if(tries>1){ await new Promise(r=>setTimeout(r,800)); return fetchJSON(u,tries-1); } throw e; }finally{ clearTimeout(tm); } }
 let ROWS=[],CITIES={},LOC={},POLY=[],DRAW=false,MAP=null,POLYL=null,FIND='',OPEN=new Set();
+let PTS={},MEM={},KEYROW={},MARKS=[],PICK=null,PICKL=null,GRPL=null; // מקומות קלפי בכתובת שלהם; PICK = מקומות שנבחרו מהחלונית
 let S=(()=>{ try{ return JSON.parse(localStorage.getItem('k26.k3'))||{}; }catch(e){ return {}; } })();
 S.tab=S.tab||'nat'; S.city=S.city||'3780'; S.tiers=S.tiers||{[CERT]:true,[NEAR]:true,[GUESS]:true,[NONE]:true}; S.metric=S.metric||'utj';
 const save=()=>{ try{ localStorage.setItem('k26.k3',JSON.stringify(S)); }catch(e){} };
@@ -380,24 +382,58 @@ async function cityView(){ const code=CITIES[S.city]?S.city:'3780', c=CITIES[cod
 function citiesOpts(){ return Object.values(CITIES).sort((a,b)=>a.name.localeCompare(b.name,'he')).map(c=>`<option value="${esc(c.name)}">`).join(''); }
 
 /* ---------- מפה ---------- */
-const mapRows=()=>ROWS.filter(r=>inTier(r)&&r.lat&&(r.kind==='place'||r.kind==='whole'));
+// כל מקום קלפי בכתובת שלו (points.json); הקבוצה שלו (שורת האשכול) משמשת רק להשוואה בין השנים
+function buildIndex(){ ROWS.forEach((r,i)=>{ if(r.kind!=='place') return; const ks=(r.names26||[]).filter(n=>(PTS[r.code]||{})[n]).map(n=>r.code+'|'+n); MEM[i]=ks; ks.forEach(k=>KEYROW[k]=i); }); }
+function mapMarks(){ const out=[]; ROWS.forEach((r,i)=>{ if(!inTier(r)) return;
+  if(r.kind==='whole'){ if(r.lat){ const k='w'+i; KEYROW[k]=i; out.push({r,i,k,lat:r.lat,lon:r.lon,name:r.names26[0]||r.city,addr:r.addr,e:r.y26.e}); } return; } if(r.kind!=='place') return;
+  const ks=MEM[i]||[]; if(!ks.length){ if(r.lat){ const k='c'+i; KEYROW[k]=i; out.push({r,i,k,lat:r.lat,lon:r.lon,name:rowName(r),addr:r.addr,e:r.y26.e}); } return; }
+  ks.forEach(k=>{ const n=k.slice(k.indexOf('|')+1),p=PTS[r.code][n]; out.push({r,i,k,lat:p[0],lon:p[1],name:n,addr:p[2],nb:p[3],e:r.y26.e/ks.length,grp:ks.length>1}); }); }); return out; }
+const sumB=bs=>{ const s={n:0,e:0,v:0,k:0,votes:{}}; bs.forEach(b=>{ s.n++; s.e+=b.e; s.v+=b.v; s.k+=b.k; for(const l in b.votes) s.votes[l]=(s.votes[l]||0)+b.votes[l]; }); return s; };
+const keyName=k=>k.slice(k.indexOf('|')+1);
+function popHtml(mk,own){ const r=mk.r,p=(x,l)=>div(lv(x.votes,l),x.e),others=mk.grp?MEM[mk.i].filter(k=>k!==mk.k):[];
+  let h=`<b>${esc(r.city)} · ${esc(mk.name)}</b><br>${esc(mk.addr||'')}${mk.nb?' · '+esc(mk.nb):''}`;
+  if(mk.grp&&own) h+=`<div class="pp"><b>המקום הזה ב-2026:</b> בעלי זכות ${fmt(own.y26.e)} · יהדות התורה ${pc(p(own.y26,['ג']))} · ש"ס ${pc(p(own.y26,['שס']))}</div>`;
+  h+=`<div class="pp">${mk.grp?`<b>הקבוצה (${MEM[mk.i].length} מקומות):</b> `:''}בעלי זכות ${fmt(r.y26.e)} · הצבעה ${pc(div(r.y26.v,r.y26.e))}<br>יהדות התורה ${pc(p(r.y26,['ג']))} (2022: ${pc(p(r.y22,['ג']))})<br>ש"ס ${pc(p(r.y26,['שס']))} (2022: ${pc(p(r.y22,['שס']))})${r.m?`<br>2024: דגל ${fmt(r.m.b.dagel||0)}, אגודה ${fmt(r.m.b.aguda||0)}, ש"ס ${fmt(r.m.b.shas||0)}, עץ ${fmt(r.m.b.peleg||0)}`:''}<br><span style="color:#9a9488">ודאות: ${esc(r.tier)}</span></div>`;
+  if(others.length) h+=`<div class="pp">משויך ל: ${others.map(k=>{ const a=(PTS[r.code][keyName(k)]||[])[2]; return esc(keyName(k))+(a?' ('+esc(a)+')':''); }).join(' · ')}</div>`;
+  return h+`<div class="pb"><button class="btn" data-a="pick" data-k="${esc(mk.k)}">בחר</button>${others.length?`<button class="btn" data-a="pickgrp" data-i="${mk.i}">בחר עם הקבוצה</button>`:''}</div>`; }
+// מקומות שנבחרו → שורות לסיכום: קבוצה שנבחרה כולה נשארת כמו שהיא; מקום שנבחר בלי שאר הקבוצה נספר לבד
+async function selRows(keys){ const by=new Map(); keys.forEach(k=>{ const i=KEYROW[k]; if(i==null) return; if(!by.has(i)) by.set(i,[]); by.get(i).push(k); });
+  const rows=[],part=[],seen=new Set();
+  for(const [i,ks] of by){ const r=ROWS[i]; if(r.kind!=='place'||ks.length>=(MEM[i]||[]).length){ rows.push(r); continue; }
+    const loc=await getLoc(r.code);
+    for(const k of ks){ const n=keyName(k),pl=loc.places.find(x=>x.name===n); if(!pl) continue; const k22=r.code+'|'+(pl.name22||''),dup=!!pl.name22&&seen.has(k22); if(pl.name22) seen.add(k22); const pt=PTS[r.code][n];
+      const pr={...r,names26:[n],names22:pl.name22&&!dup?[pl.name22]:[],y26:sumB(pl.boxes26),y22:dup?sumB([]):sumB(pl.boxes22),boxes26:pl.boxes26.map(b=>b.box),boxes22:dup?[]:pl.boxes22.map(b=>b.box),m:null,n_places:1,addr:pt[2],nbhd:pt[3]||'',lat:pt[0],lon:pt[1]};
+      rows.push(pr); part.push({n,p22:pr.names22[0]||'',rest:MEM[i].filter(x=>!ks.includes(x)).map(keyName)}); } }
+  return {rows,part}; }
 const METRICS=[['utj','יהדות התורה: שינוי מ-2022'],['shas','ש"ס: שינוי מ-2022'],['right','עוצמה + צ"ד: שינוי מ-2022'],['putj','יהדות התורה 2026'],['ner','צבע שחור 2026'],['dg','דגל או אגודה (2024)']];
 function metricVal(r){ const p=(y,l)=>div(lv(r[y].votes,l),r[y].e); switch(S.metric){ case 'utj': return (p('y26',['ג'])-p('y22',['ג']))*100; case 'shas': return (p('y26',['שס'])-p('y22',['שס']))*100; case 'right': return (p('y26',['ב','ט'])-p('y22',['ט']))*100; case 'putj': return p('y26',['ג'])*100; case 'ner': return p('y26',['נר'])*100; case 'dg': return r.m&&((r.m.b.dagel||0)+(r.m.b.aguda||0))>=30?dshare(r)*100:null; } return null; }
 function mcolor(v){ if(!ok(v)) return '#c9c4b8'; if(['utj','shas','right'].includes(S.metric)){ const t=Math.max(-1,Math.min(1,v/8)); return t>=0?`rgba(0,145,154,${(.2+.8*t).toFixed(2)})`:`rgba(192,103,58,${(.2+.8*-t).toFixed(2)})`; } if(S.metric==='dg'){ const t=(v-50)/50; return t>=0?`rgba(19,111,115,${(.2+.8*t).toFixed(2)})`:`rgba(181,121,26,${(.2+.8*-t).toFixed(2)})`; } const mx=S.metric==='ner'?4:70; return `rgba(19,111,115,${(.12+.88*Math.min(1,v/mx)).toFixed(2)})`; }
 function mapLegend(){ const m=S.metric; if(['utj','shas','right'].includes(m)) return '<span><i style="background:rgb(192,103,58)"></i>ירידה</span><span><i style="background:rgb(0,145,154)"></i>עלייה</span><span>צבע מלא: 8 נקודות ומעלה</span>'; if(m==='dg') return '<span><i style="background:rgb(181,121,26)"></i>אגודה</span><span><i style="background:rgb(19,111,115)"></i>דגל</span>'; return '<span><i style="background:rgba(19,111,115,.3)"></i>נמוך</span><span><i style="background:rgb(19,111,115)"></i>גבוה</span>'; }
 function inPoly(p,q){ let c=false; for(let i=0,j=q.length-1;i<q.length;j=i++){ const [yi,xi]=q[i],[yj,xj]=q[j]; if(((yi>p[0])!==(yj>p[0]))&&(p[1]<(xj-xi)*(p[0]-yi)/(yj-yi)+xi)) c=!c; } return c; }
-function mapView(){ return `<div class="kick">מפה</div><h1>סימון שטח</h1><p class="lede">מסמנים שטח על המפה ומקבלים עליו סיכום כמו של עיר.</p><div class="mapbar noprint"><select data-c="metric">${METRICS.map(([v,t])=>`<option value="${v}" ${S.metric===v?'selected':''}>${t}</option>`).join('')}</select><button class="btn ${DRAW?'on':''}" data-a="draw">${DRAW?'מסמן: לחץ על המפה, ובסיום לחץ כאן':'סמן שטח'}</button><button class="btn" data-a="clearpoly" ${POLY.length?'':'disabled'}>נקה</button><input class="inp" type="text" id="jump" list="locs" placeholder="קפיצה ליישוב" style="width:170px"><datalist id="locs">${citiesOpts()}</datalist></div><div class="ml">${mapLegend()}<span><i style="background:#c9c4b8"></i>אין נתון</span><span>גודל הנקודה: בעלי זכות בחירה</span></div><div id="map"></div><div id="mapres" style="margin-top:18px"></div>`; }
-function mountMap(){ try{ if(MAP){ const rr=MAP._renderer; if(rr&&rr._redrawRequest){ L.Util.cancelAnimFrame(rr._redrawRequest); rr._redrawRequest=null; } MAP.remove(); } }catch(e){} POLYL=null;
+function mapView(){ return `<div class="kick">מפה</div><h1>סימון שטח</h1><p class="lede">מסמנים שטח על המפה ומקבלים עליו סיכום כמו של עיר.</p><div class="mapbar noprint"><select data-c="metric">${METRICS.map(([v,t])=>`<option value="${v}" ${S.metric===v?'selected':''}>${t}</option>`).join('')}</select><button class="btn ${DRAW?'on':''}" data-a="draw">${DRAW?'מסמן: לחץ על המפה, ובסיום לחץ כאן':'סמן שטח'}</button><button class="btn" data-a="clearpoly" ${POLY.length||PICK?'':'disabled'}>נקה</button><input class="inp" type="text" id="jump" list="locs" placeholder="קפיצה ליישוב" style="width:170px"><datalist id="locs">${citiesOpts()}</datalist></div><div class="ml">${mapLegend()}<span><i style="background:#c9c4b8"></i>אין נתון</span><span>גודל הנקודה: בעלי זכות בחירה</span></div><div id="map"></div><div id="mapres" style="margin-top:18px"></div>`; }
+function mountMap(){ try{ if(MAP){ const rr=MAP._renderer; if(rr&&rr._redrawRequest){ L.Util.cancelAnimFrame(rr._redrawRequest); rr._redrawRequest=null; } MAP.remove(); } }catch(e){} POLYL=null; PICKL=null; GRPL=null;
   MAP=L.map('map',{preferCanvas:true}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(MAP); const v=S.mapView; if(v) MAP.setView([v.lat,v.lng],v.z); else MAP.setView([31.75,34.95],8);
-  const list=mapRows(),mx=Math.max(1,...list.map(r=>r.y26.e));
-  list.forEach(r=>{ const m=L.circleMarker([r.lat,r.lon],{radius:2.5+10*Math.sqrt(r.y26.e/mx),color:'#2a2722',weight:.4,fillColor:mcolor(metricVal(r)),fillOpacity:1}).addTo(MAP); m.on('popupopen',()=>{ if(DRAW) m.closePopup(); });
-    m.bindPopup(()=>{ const p=(y,l)=>div(lv(r[y].votes,l),r[y].e); return `<b>${esc(r.city)} · ${esc(rowName(r))}</b><br>${esc(r.addr||'')}${r.nbhd?' · '+esc(r.nbhd):''}<br>בעלי זכות ${fmt(r.y26.e)} · הצבעה ${pc(div(r.y26.v,r.y26.e))}<br>יהדות התורה ${pc(p('y26',['ג']))} (2022: ${pc(p('y22',['ג']))})<br>ש"ס ${pc(p('y26',['שס']))} (2022: ${pc(p('y22',['שס']))})${r.m?`<br>2024: דגל ${fmt(r.m.b.dagel||0)}, אגודה ${fmt(r.m.b.aguda||0)}, ש"ס ${fmt(r.m.b.shas||0)}, עץ ${fmt(r.m.b.peleg||0)}`:''}<br><span style="color:#9a9488">ודאות: ${esc(r.tier)}</span>`; }); });
+  MARKS=mapMarks(); const mx=Math.max(1,...MARKS.map(m=>m.e));
+  MARKS.forEach(mk=>{ const r=mk.r,m=L.circleMarker([mk.lat,mk.lon],{radius:2.5+10*Math.sqrt(mk.e/mx),color:'#2a2722',weight:.4,fillColor:mcolor(metricVal(r)),fillOpacity:1}).addTo(MAP);
+    m.bindPopup(()=>popHtml(mk));
+    m.on('popupopen',async()=>{ if(DRAW){ m.closePopup(); return; } if(GRPL){ MAP.removeLayer(GRPL); GRPL=null; }
+      if(mk.grp){ const ll=MEM[mk.i].map(k=>PTS[r.code][keyName(k)]).map(p=>[p[0],p[1]]); GRPL=L.polyline(ll,{color:'#2a2722',weight:1.5,dashArray:'4 4'}).addTo(MAP);
+        try{ const loc=await getLoc(r.code),pl=loc.places.find(x=>x.name===mk.name); if(pl&&m.isPopupOpen()) m.setPopupContent(popHtml(mk,{y26:sumB(pl.boxes26)})); }catch(e){} } });
+    m.on('popupclose',()=>{ if(GRPL){ MAP.removeLayer(GRPL); GRPL=null; } }); });
   const keep=()=>{ const c=MAP.getCenter(); S.mapView={lat:+c.lat.toFixed(5),lng:+c.lng.toFixed(5),z:MAP.getZoom()}; save(); }; MAP.on('moveend zoomend',keep);
   MAP.on('click',e=>{ if(!DRAW) return; POLY.push([e.latlng.lat,e.latlng.lng]); drawPoly(); drawRes(); }); $('#map').style.cursor=DRAW?'crosshair':''; drawPoly(); }
-function drawPoly(){ if(POLYL){ MAP.removeLayer(POLYL); POLYL=null; } if(POLY.length) POLYL=(POLY.length>=3?L.polygon(POLY,{color:'#2a2722',weight:2,fillOpacity:.06}):L.polyline(POLY,{color:'#2a2722',weight:2,dashArray:'4 4'})).addTo(MAP); const c=document.querySelector('[data-a="clearpoly"]'); if(c) c.disabled=!POLY.length; }
-async function drawRes(){ const el=$('#mapres'); if(!el) return; if(POLY.length<3||DRAW){ el.innerHTML=`<p class="empty">${POLY.length>=3?'ממשיך לסמן. בסיום לחץ על הכפתור למעלה.':'לחץ "סמן שטח", לחץ על המפה סביב האזור, ובסיום לחץ שוב על הכפתור.'}</p>`; return; }
-  const sel=ROWS.filter(r=>r.lat&&(r.kind==='place'||r.kind==='whole')&&inPoly([r.lat,r.lon],POLY)); if(!sel.length){ el.innerHTML='<p class="empty">אין מקומות קלפי בשטח המסומן.</p>'; return; }
-  const codes=[...new Set(sel.map(r=>r.code))]; el.innerHTML=`<div class="kick">${sel.length} מקומות קלפי · ${codes.length===1?esc(sel[0].city):codes.length+' ערים ויישובים'}</div><h1 style="font-size:22px">השטח המסומן</h1>`+await areaReport(sel,{}); }
+function drawPoly(){ if(POLYL){ MAP.removeLayer(POLYL); POLYL=null; } if(POLY.length) POLYL=(POLY.length>=3?L.polygon(POLY,{color:'#2a2722',weight:2,fillOpacity:.06}):L.polyline(POLY,{color:'#2a2722',weight:2,dashArray:'4 4'})).addTo(MAP);
+  if(PICKL){ MAP.removeLayer(PICKL); PICKL=null; } if(PICK) PICKL=L.layerGroup(MARKS.filter(m=>PICK.includes(m.k)).map(m=>L.circleMarker([m.lat,m.lon],{radius:15,color:'#2a2722',weight:2.5,fill:false,interactive:false}))).addTo(MAP);
+  const c=document.querySelector('[data-a="clearpoly"]'); if(c) c.disabled=!POLY.length&&!PICK; }
+async function drawRes(){ const el=$('#mapres'); if(!el) return; let keys;
+  if(PICK) keys=new Set(PICK);
+  else { if(POLY.length<3||DRAW){ el.innerHTML=`<p class="empty">${POLY.length>=3?'ממשיך לסמן. בסיום לחץ על הכפתור למעלה.':'לחץ "סמן שטח", לחץ על המפה סביב האזור, ובסיום לחץ שוב על הכפתור. אפשר גם ללחוץ על מקום קלפי ואז על "בחר".'}</p>`; return; }
+    keys=new Set(MARKS.filter(m=>inPoly([m.lat,m.lon],POLY)).map(m=>m.k)); }
+  if(!keys.size){ el.innerHTML='<p class="empty">אין מקומות קלפי בשטח המסומן.</p>'; return; }
+  const {rows:sel,part}=await selRows(keys); if(!sel.length){ el.innerHTML='<p class="empty">אין נתונים למקומות שנבחרו.</p>'; return; }
+  const codes=[...new Set(sel.map(r=>r.code))], one=PICK&&keys.size===1;
+  const pn=part.length?`<div class="note" style="margin:0 0 14px">${part.map(x=>`<b>${esc(x.n)}</b> נספר לבד, בלי שאר הקבוצה שלו (משויך ל: ${x.rest.map(esc).join(' · ')}). ${x.p22?`ההשוואה ל-2022 היא רק למקום המקביל שלו, ${esc(x.p22)}`:'אין לו מקום מקביל משלו ב-2022'}, ואין לו נתוני 2024.`).join('<br>')} כדי לספור את הקבוצה כולה, סמן שטח שכולל את כל המקומות שלה או לחץ "בחר עם הקבוצה".</div>`:'';
+  el.innerHTML=`<div class="kick">${keys.size} ${keys.size===1?'מקום קלפי':'מקומות קלפי'} · ${codes.length===1?esc(sel[0].city):codes.length+' ערים ויישובים'}</div><h1 style="font-size:22px">${one?esc(sel[0].names26[0]||rowName(sel[0])):PICK?'המקומות שנבחרו':'השטח המסומן'}</h1>`+pn+await areaReport(sel,{}); }
 
 /* ---------- מסגרת ---------- */
 function topBar(){ return `<header class="top noprint"><div class="brand">ניתוח הבחירות<small>כנסת 2022 ו-2026, מוניציפלי 2024</small></div><nav class="tabs">${[['nat','כל הארץ'],['city','לפי עיר'],['map','מפה']].map(([v,l])=>`<button data-tab="${v}" class="${S.tab===v?'on':''}">${l}</button>`).join('')}</nav><div class="tools"><details class="tierbox"><summary class="btn">ודאות: ${allOn()?'הכל':TIERS.filter(t=>S.tiers[t]).length+' מתוך 4'}</summary><div class="pop"><div style="color:var(--ink2);margin-bottom:6px">אילו חיבורים בין מקומות הקלפי בשנים השונות לכלול:</div>${TIERS.map(t=>`<label><input type="checkbox" data-tier="${t}" ${S.tiers[t]?'checked':''}> ${t}</label>`).join('')}${allOn()?'':'<div class="warn" style="margin-top:6px">הסכומים אינם הנתון הרשמי המלא.</div>'}</div></details>${S.tab==='map'?'':'<button class="btn" data-a="print">שמירה כ-PDF</button>'}</div></header>`; }
@@ -417,8 +453,9 @@ document.addEventListener('click',async ev=>{ const t=ev.target;
   const op=t.closest('tr[data-open]'); if(op){ const k=op.dataset.open; OPEN.has(k)?OPEN.delete(k):OPEN.add(k); const y=window.scrollY; await render(); window.scrollTo(0,y); return; }
   const a=t.closest('[data-a]'); if(!a) return; const act=a.dataset.a;
   if(act==='print'){ const ds=[...document.querySelectorAll('details.more')]; const was=ds.map(d=>d.open); ds.forEach(d=>d.open=true); const tt=document.title; document.title='ניתוח בחירות - '+($('h1')?.innerText||''); window.print(); document.title=tt; ds.forEach((d,i)=>d.open=was[i]); return; }
-  if(act==='draw'){ DRAW=!DRAW; if(!DRAW&&POLY.length<3) POLY=[]; a.classList.toggle('on',DRAW); a.textContent=DRAW?'מסמן: לחץ על המפה, ובסיום לחץ כאן':'סמן שטח'; $('#map').style.cursor=DRAW?'crosshair':''; drawPoly(); return drawRes(); }
-  if(act==='clearpoly'){ POLY=[]; DRAW=false; const d=document.querySelector('[data-a="draw"]'); if(d){ d.classList.remove('on'); d.textContent='סמן שטח'; } $('#map').style.cursor=''; drawPoly(); return drawRes(); } });
+  if(act==='pick'||act==='pickgrp'){ PICK=act==='pick'?[a.dataset.k]:(MEM[+a.dataset.i]||[]).slice(); POLY=[]; DRAW=false; if(MAP) MAP.closePopup(); const d=document.querySelector('[data-a="draw"]'); if(d){ d.classList.remove('on'); d.textContent='סמן שטח'; } $('#map').style.cursor=''; drawPoly(); await drawRes(); $('#mapres').scrollIntoView({behavior:'smooth',block:'start'}); return; }
+  if(act==='draw'){ DRAW=!DRAW; if(DRAW&&PICK) PICK=null; if(!DRAW&&POLY.length<3) POLY=[]; a.classList.toggle('on',DRAW); a.textContent=DRAW?'מסמן: לחץ על המפה, ובסיום לחץ כאן':'סמן שטח'; $('#map').style.cursor=DRAW?'crosshair':''; drawPoly(); return drawRes(); }
+  if(act==='clearpoly'){ POLY=[]; PICK=null; DRAW=false; const d=document.querySelector('[data-a="draw"]'); if(d){ d.classList.remove('on'); d.textContent='סמן שטח'; } $('#map').style.cursor=''; drawPoly(); return drawRes(); } });
 document.addEventListener('change',ev=>{ const t=ev.target;
   if(t.dataset.tier){ S.tiers[t.dataset.tier]=t.checked; save(); return render().then(()=>{ const d=document.querySelector('details.tierbox'); if(d) d.open=true; }); }
   if(t.dataset.c==='metric'){ S.metric=t.value; save(); return render(); }
@@ -427,7 +464,7 @@ document.addEventListener('change',ev=>{ const t=ev.target;
   if(t.id==='cadd'){ const c=pick(t.value); if(c) goCity(c); return; }
   if(t.id==='jump'){ const c=pick(t.value); if(c&&MAP){ const ps=ROWS.filter(r=>r.code===c&&r.lat); if(ps.length) MAP.fitBounds(ps.map(r=>[r.lat,r.lon]),{padding:[30,30],maxZoom:15}); t.value=''; } } });
 window.addEventListener('hashchange',()=>{ if(!ROWS.length) return; const t=S.tab,c=S.city; readHash(); if(t!==S.tab||c!==S.city){ save(); render(); } });
-fetchJSON('live/base_table.json').then(d=>{ ROWS=d; ROWS.forEach(r=>{ if(r.code==='9999') return; if(!CITIES[r.code]) CITIES[r.code]={code:r.code,name:r.city}; }); readHash(); return render(); }).catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; });
+Promise.all([fetchJSON('live/base_table.json'),fetchJSON('live/points.json').catch(()=>({}))]).then(([d,pt])=>{ ROWS=d; PTS=pt; buildIndex(); ROWS.forEach(r=>{ if(r.code==='9999') return; if(!CITIES[r.code]) CITIES[r.code]={code:r.code,name:r.city}; }); readHash(); return render(); }).catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; });
 </script>
 </body>
 </html>
