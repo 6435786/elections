@@ -349,6 +349,18 @@ function nbCard(rows){ const g={}; rows.forEach(r=>{ if(r.kind!=='place'||!inTie
   let h=`<section class="card"><h2>לפי שכונה</h2><p class="sub">אחוז מבעלי זכות הבחירה ב-2026, ומתחת השינוי מ-2022 בנקודות. הרקע: טורקיז עלייה, כתום ירידה. ככל שהשינוי גדול יותר, הצבע חזק יותר.</p><div class="tw"><table><tr><th>שכונה</th><th>יהדות התורה</th><th>ש"ס</th><th>עוצמה + צ"ד</th><th>צבע שחור</th><th>הציבור החרדי</th></tr>`;
   L.forEach(x=>{ h+=`<tr class="${x.A.y26.e<500?'dim':''}"><td>${esc(x.n)}<small>${fmt(x.A.y26.e)} בעלי זכות בחירה</small></td>${cell(x.A,['ג'],['ג'])}${cell(x.A,['שס'],['שס'])}${cell(x.A,['ב','ט'],['ט'])}${cn(x.A,['נר'])}${cn(x.A,['זך'])}</tr>`; });
   return h+`</table></div><div class="note">ב-2022 עוצמה והציונות הדתית רצו יחד. השיוך לשכונות אינו רשמי: לפי המפה והתיקונים שלך. מקום קלפי בשתי שכונות נספר בראשונה. שורות אפורות: פחות מ-500 בעלי זכות בחירה.</div></section>`; }
+// גושים (live/blocks.json): כל קבוצת מקומות משויכת לגוש של המקום הגדול בה. אחוזים מהקולות הכשרים.
+let BLK={};
+const ARL=['עם','ודם','ד'], RT26=['ב','ט','מחל','ני','ך'], RT22=['ט','מחל','ב'];
+function blkCard(rows,code){ const B=BLK[code]; const g={}; let out=0;
+  rows.forEach(r=>{ if(r.kind!=='place'||!inTier(r)) return; if(div(lv(r.y26.votes,ARL),r.y26.k)>=.5) return; const b=B.rows[r.names26.join('|')]; if(!b){ out++; return; } (g[b]=g[b]||[]).push(r); });
+  const L=B.order.filter(b=>g[b]).map(b=>({b,A:agg(g[b])})); if(L.length<2) return '';
+  const dk=(A,k6,k2)=>{ const p6=div(lv(A.y26.votes,k6),A.y26.k),p2=div(lv(A.y22.votes,k2),A.y22.k); return ok(p6)&&ok(p2)?p6-p2:null; };
+  const mx=Math.max(...L.flatMap(x=>[dk(x.A,['ג'],['ג']),dk(x.A,['שס'],['שס']),dk(x.A,RT26,RT22)]).filter(ok).map(Math.abs),0.01);
+  const cell=(A,k6,k2)=>{ const p6=div(lv(A.y26.votes,k6),A.y26.k),d=dk(A,k6,k2); const a=d==null?0:Math.min(1,Math.abs(d)/mx)*.4; const bg=d==null?'transparent':d>0?`rgba(0,145,154,${a.toFixed(2)})`:`rgba(192,103,58,${a.toFixed(2)})`; return `<td><span class="hc" style="background:${bg}">${pc(p6)}</span><small>${pts(d)}</small></td>`; };
+  let h=`<section class="card"><h2>לפי גושים</h2><p class="sub">אחוז מהקולות הכשרים ב-2026, ומתחת השינוי מ-2022 בנקודות. הרקע: טורקיז עלייה, כתום ירידה.</p><div class="tw"><table><tr><th>גוש</th><th>יהדות התורה</th><th>ש"ס</th><th>הימין שאינו חרדי</th><th>צבע שחור + הציבור החרדי</th></tr>`;
+  L.forEach(x=>{ const A=x.A,n=lv(A.y26.votes,['נר','זך']); h+=`<tr><td>${esc(x.b)}<small>${fmt(A.y22.e)} ← ${fmt(A.y26.e)} בעלי זכות בחירה</small></td>${cell(A,['ג'],['ג'])}${cell(A,['שס'],['שס'])}${cell(A,RT26,RT22)}<td>${pc(div(n,A.y26.k))}<small>${fmt(n)} קולות</small></td></tr>`; });
+  return h+`</table></div><div class="note">הימין שאינו חרדי: הליכוד, עוצמה יהודית, הציונות הדתית, נעם ועמך ישראל; ב-2022 הרשימה המשותפת, הליכוד והבית היהודי. כל קבוצת מקומות קלפי שויכה לגוש של המקום הגדול בה.${B.note?' '+esc(B.note):''}${out?` ${out} קבוצות מקומות מחוץ לגושים לא נכללו.`:''}</div></section>`; }
 /* חיפוש קלפי */
 // פירוט קלפיות של קבוצה: אחוזים מהקולות הכשרים, כולל עוצמה, הציונות הדתית והליכוד
 async function boxDetail(r){ const loc=await getLoc(r.code); const s6=new Set(r.boxes26),s2=new Set(r.boxes22),b6=[],b2=[]; loc.places.forEach(p=>{ p.boxes26.forEach(b=>{ if(s6.has(b.box)) b6.push({...b,pl:p.name}); }); p.boxes22.forEach(b=>{ if(s2.has(b.box)) b2.push({...b,pl:p.name22||p.name}); }); });
@@ -375,7 +387,7 @@ async function areaReport(rows,o={}){ const A=agg(rows); let h=headStats(A)+resu
   else { if(ch.both) inner+=sgCityBlock(rows,ch); if(ch.cmp24) inner+=y24Block(rows); else if(ch.has24) inner+=`<p class="note">אין השוואה ל-2024: ${ch.joint?'יהדות התורה וש"ס רצו ברשימה משותפת':'החלוקה בין הרשימות החרדיות שונה'}, ולכן היא לא ברת השוואה.</p>`; }
   h+=`<section class="card"><h2>מה השתנה</h2><p class="sub">2022 מול 2026.</p>${inner}</section>`;
   h+=flowCard(rows);
-  if(o.nb) h+=nbCard(rows);
+  if(o.nb) h+=(BLK[codes[0]]&&codes.length===1?blkCard(rows,codes[0]):nbCard(rows));
   if(o.places) h+=await placesBlock(rows);
   if(!allOn()) h+=`<p class="note warn">לא כל רמות הוודאות מסומנות, ולכן הסכומים אינם הנתון הרשמי המלא.</p>`;
   return h; }
@@ -470,7 +482,7 @@ document.addEventListener('change',ev=>{ const t=ev.target;
   if(t.id==='cadd'){ const c=pick(t.value); if(c) goCity(c); return; }
   if(t.id==='jump'){ const c=pick(t.value); if(c&&MAP){ const ps=ROWS.filter(r=>r.code===c&&r.lat); if(ps.length) MAP.fitBounds(ps.map(r=>[r.lat,r.lon]),{padding:[30,30],maxZoom:15}); t.value=''; } } });
 window.addEventListener('hashchange',()=>{ if(!ROWS.length) return; const t=S.tab,c=S.city; readHash(); if(t!==S.tab||c!==S.city){ save(); render(); } });
-Promise.all([fetchJSON('live/base_table.json'),fetchJSON('live/points.json').catch(()=>({}))]).then(([d,pt])=>{ ROWS=d; PTS=pt; buildIndex(); ROWS.forEach(r=>{ if(r.code==='9999') return; if(!CITIES[r.code]) CITIES[r.code]={code:r.code,name:r.city}; }); readHash(); return render(); }).catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; });
+Promise.all([fetchJSON('live/base_table.json'),fetchJSON('live/points.json').catch(()=>({})),fetchJSON('live/blocks.json').catch(()=>({}))]).then(([d,pt,bk])=>{ ROWS=d; PTS=pt; BLK=bk; buildIndex(); ROWS.forEach(r=>{ if(r.code==='9999') return; if(!CITIES[r.code]) CITIES[r.code]={code:r.code,name:r.city}; }); readHash(); return render(); }).catch(e=>{ $('#app').innerHTML='<p class="empty">שגיאה בטעינת הנתונים: '+esc(e.message)+'</p>'; });
 </script>
 </body>
 </html>
