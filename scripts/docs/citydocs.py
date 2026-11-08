@@ -17,7 +17,7 @@ def pct0(x): return f"{abs(x):.0f}%" + ("−" if x < 0 else "")                 
 def pc(a, b, d=1): return f"{100 * a / b:.{d}f}%" if b else "—"
 def rel(a, b): return 100 * (a / b - 1) if b else 0
 
-ORDER = ["utj", "shas", "orzd", "otz", "rzd", "likud", "zach", "ner", "noam", "other", "har", "right"]
+ORDER = ["utj", "shas", "orzd", "likud", "zach", "ner", "noam", "other", "har", "right"]
 def main_table(S):
     H = ["רשימה", "קולות 2022", "קולות 2026", "שינוי בקולות", "% מבעלי זכות הבחירה", "% מהקולות הכשרים"]
     rows = [H]
